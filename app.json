@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Expo Three Cube",
+    "slug": "expo-three-cube",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#050510"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
