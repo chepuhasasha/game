@@ -1,50 +1,48 @@
-# Welcome to your Expo app 👋
+# Руководство по запуску проекта
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Добро пожаловать! Этот проект создан на базе Expo и демонстрирует вращающийся трёхмерный куб, отрисованный с помощью Three.js на главном экране мобильного приложения.
 
-## Get started
+## Требования
 
-1. Install dependencies
+- [Node.js](https://nodejs.org/) версии 18 или новее
+- [npm](https://www.npmjs.com/) версии 9 или новее (поставляется вместе с Node.js)
+- Установленное Expo CLI (опционально, `npm install -g expo-cli`)
+- Эмулятор Android/iOS или приложение [Expo Go](https://expo.dev/go) на реальном устройстве
 
-   ```bash
-   npm install
-   ```
+## Установка зависимостей
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Выполните установку зависимостей один раз после клонирования репозитория:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Запуск в режиме разработки
 
-## Learn more
+```bash
+npm run start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+После запуска команды в терминале появится QR-код и ссылки для открытия приложения:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Expo Go (сканируйте QR-код на физическом устройстве)
+- Эмулятор Android: `npm run android`
+- Симулятор iOS: `npm run ios`
+- Веб-версия (предварительная): `npm run web`
 
-## Join the community
+## Проверка кода
 
-Join our community of developers creating universal apps.
+Перед коммитом рекомендуется выполнять форматирование и проверку линтером:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run format
+npm run lint
+```
+
+## Полезная информация
+
+- Основной экран расположен в `app/(tabs)/index.tsx`.
+- Компонент трёхмерного куба находится в `components/rotating-cube.tsx`.
+- Настройка линтинга определяется файлом `eslint.config.js`.
+
+Приятной работы с проектом!
