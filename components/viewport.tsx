@@ -1,11 +1,24 @@
-import { JSX, useCallback, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { JSX, useCallback, useMemo, useRef } from "react";
+import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import { BoxObject, Viewport } from "@/core";
 
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
+  const lastDx = useRef(0);
+
+  /**
+   * Обрабатывает изменение горизонтального свайпа и вращает сцену.
+   * @param {number} deltaX Смещение пальца по горизонтали в пикселях.
+   * @returns {void}
+   */
+  const handleHorizontalDrag = useCallback(
+    (deltaX: number): void => {
+      viewport.current?.rotateHorizontally(deltaX);
+    },
+    []
+  );
 
   /**
    * Обработчик создания контекста OpenGL, инициализирующий сцену Three.js.
@@ -52,7 +65,36 @@ export const ViewPort = (): JSX.Element => {
     []
   );
 
-  return <GLView style={styles.glView} onContextCreate={handleContextCreate} />;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          lastDx.current = 0;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const deltaX = gestureState.dx - lastDx.current;
+          lastDx.current = gestureState.dx;
+          handleHorizontalDrag(deltaX);
+        },
+        onPanResponderRelease: () => {
+          lastDx.current = 0;
+        },
+        onPanResponderTerminate: () => {
+          lastDx.current = 0;
+        },
+      }),
+    [handleHorizontalDrag]
+  );
+
+  return (
+    <GLView
+      style={styles.glView}
+      onContextCreate={handleContextCreate}
+      {...panResponder.panHandlers}
+    />
+  );
 };
 
 const styles = StyleSheet.create({
