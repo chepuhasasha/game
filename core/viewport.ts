@@ -227,7 +227,17 @@ export class Viewport {
 
   /**
    * Настраивает параметры инерции горизонтального вращения камеры.
-   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options Параметры инерции.
+   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options
+   *   Объект с параметрами инерции.
+   * @param {number} [options.friction]
+   *   Коэффициент экспоненциального демпфирования угловой скорости: чем больше значение, тем
+   *   быстрее скорость затухает после завершения жеста. Ноль отключает торможение.
+   * @param {number} [options.velocityThreshold]
+   *   Минимальная по модулю угловая скорость, при падении ниже которой инерция считается
+   *   завершённой и дальнейшее вращение прекращается.
+   * @param {number} [options.sensitivity]
+   *   Множитель преобразования горизонтального жеста в радианы: влияет на скорость поворота
+   *   камеры при перетаскивании, а также на исходную скорость инерции.
    * @returns {void}
    */
   setRotationInertia({
