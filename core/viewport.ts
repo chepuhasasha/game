@@ -39,6 +39,7 @@ export class Viewport {
   private pendingRotationDelta = 0;
   private rotationFriction = 1;
   private rotationVelocityThreshold = 1e-4;
+  private rotationVelocityLimit = Infinity;
   private rotationSensitivity = 0.005;
   private lastDeltaTime = 1 / 60;
 
@@ -222,12 +223,12 @@ export class Viewport {
     const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
     const dt = this.lastDeltaTime || 1 / 60;
-    this.rotationVelocity = deltaAngle / dt;
+    this.rotationVelocity = this.clampRotationVelocity(deltaAngle / dt);
   }
 
   /**
    * Настраивает параметры инерции горизонтального вращения камеры.
-   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options
+   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number; maxVelocity?: number }} options
    *   Объект с параметрами инерции.
    * @param {number} [options.friction]
    *   Коэффициент экспоненциального демпфирования угловой скорости: чем больше значение, тем
@@ -238,16 +239,20 @@ export class Viewport {
    * @param {number} [options.sensitivity]
    *   Множитель преобразования горизонтального жеста в радианы: влияет на скорость поворота
    *   камеры при перетаскивании, а также на исходную скорость инерции.
+   * @param {number} [options.maxVelocity]
+   *   Максимальная по модулю угловая скорость вращения камеры. Бесконечность отключает ограничение.
    * @returns {void}
    */
   setRotationInertia({
     friction,
     velocityThreshold,
     sensitivity,
+    maxVelocity,
   }: {
     friction?: number;
     velocityThreshold?: number;
     sensitivity?: number;
+    maxVelocity?: number;
   }): void {
     if (typeof friction === "number" && Number.isFinite(friction)) {
       this.rotationFriction = Math.max(0, friction);
@@ -259,6 +264,12 @@ export class Viewport {
 
     if (typeof sensitivity === "number" && Number.isFinite(sensitivity)) {
       this.rotationSensitivity = Math.max(0, sensitivity);
+    }
+
+    if (typeof maxVelocity === "number" && maxVelocity >= 0) {
+      this.rotationVelocityLimit = Number.isFinite(maxVelocity)
+        ? Math.max(0, maxVelocity)
+        : Infinity;
     }
   }
 
@@ -304,7 +315,7 @@ export class Viewport {
     }
 
     const damping = dt > 0 ? Math.exp(-this.rotationFriction * dt) : 1;
-    this.rotationVelocity *= damping;
+    this.rotationVelocity = this.clampRotationVelocity(this.rotationVelocity * damping);
 
     if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
       this.rotationVelocity = 0;
@@ -313,6 +324,20 @@ export class Viewport {
 
     const deltaAngle = this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
     this.applyHorizontalAngleDelta(deltaAngle);
+  }
+
+  /**
+   * Ограничивает скорость вращения камеры заданным максимумом.
+   * @param {number} velocity Исходная угловая скорость.
+   * @returns {number} Ограниченная угловая скорость.
+  */
+  private clampRotationVelocity(velocity: number): number {
+    if (!Number.isFinite(this.rotationVelocityLimit) || this.rotationVelocityLimit <= 0) {
+      return velocity;
+    }
+
+    const limit = this.rotationVelocityLimit;
+    return Math.min(Math.max(velocity, -limit), limit);
   }
 
   /**
