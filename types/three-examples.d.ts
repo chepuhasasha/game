@@ -6,8 +6,8 @@ declare module "three/examples/jsm/geometries/RoundedBoxGeometry.js" {
       width: number,
       height: number,
       depth: number,
-      radius?: number,
-      smoothness?: number
+      segments?: number,
+      radius?: number
     );
   }
 }

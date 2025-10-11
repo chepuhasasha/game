@@ -19,8 +19,8 @@ export class BoxObject extends Mesh implements Updatable {
         box.width,
         box.height,
         box.depth,
-        BoxObject.resolveCornerRadius(box),
-        BoxObject.resolveCornerSmoothness(box)
+        BoxObject.resolveCornerSmoothness(box),
+        BoxObject.resolveCornerRadius(box)
       ),
       materials[box.material]
     );
