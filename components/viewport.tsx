@@ -10,6 +10,7 @@ const ROTATION_STEP_ANGLE = Math.PI / 18;
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const lastDx = useRef(0);
+  const lastTimestamp = useRef<number | null>(null);
 
   /**
    * Вызывает лёгкую вибрацию при прохождении шага вращения.
@@ -24,11 +25,18 @@ export const ViewPort = (): JSX.Element => {
    * Обрабатывает изменение горизонтального свайпа и вращает сцену.
    * @param {number} deltaX Смещение пальца по горизонтали в пикселях.
    * @param {number} velocityX Горизонтальная скорость жеста в пикселях в секунду.
+   * @param {number} [deltaTime] Интервал времени между событиями жеста в секундах.
+   * @param {boolean} [isFinal] Признак завершающего события жеста.
    * @returns {void}
    */
   const handleHorizontalDrag = useCallback(
-    (deltaX: number, velocityX: number): void => {
-      viewport.current?.rotateHorizontally(deltaX, velocityX);
+    (
+      deltaX: number,
+      velocityX: number,
+      deltaTime?: number,
+      isFinal = false
+    ): void => {
+      viewport.current?.rotateHorizontally(deltaX, velocityX, deltaTime, isFinal);
     },
     []
   );
@@ -87,21 +95,36 @@ export const ViewPort = (): JSX.Element => {
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
+        onPanResponderGrant: (evt) => {
           lastDx.current = 0;
+          lastTimestamp.current =
+            typeof evt.nativeEvent.timestamp === "number"
+              ? evt.nativeEvent.timestamp
+              : Date.now();
         },
-        onPanResponderMove: (_, gestureState) => {
+        onPanResponderMove: (evt, gestureState) => {
+          const timestamp =
+            typeof evt.nativeEvent.timestamp === "number"
+              ? evt.nativeEvent.timestamp
+              : Date.now();
+          const deltaTime =
+            lastTimestamp.current !== null
+              ? (timestamp - lastTimestamp.current) / 1000
+              : undefined;
+          lastTimestamp.current = timestamp;
           const deltaX = gestureState.dx - lastDx.current;
           lastDx.current = gestureState.dx;
-          handleHorizontalDrag(deltaX, gestureState.vx);
+          handleHorizontalDrag(deltaX, gestureState.vx, deltaTime, false);
         },
         onPanResponderRelease: (_, gestureState) => {
-          handleHorizontalDrag(0, gestureState.vx);
+          handleHorizontalDrag(0, gestureState.vx, undefined, true);
           lastDx.current = 0;
+          lastTimestamp.current = null;
         },
         onPanResponderTerminate: (_, gestureState) => {
-          handleHorizontalDrag(0, gestureState.vx);
+          handleHorizontalDrag(0, gestureState.vx, undefined, true);
           lastDx.current = 0;
+          lastTimestamp.current = null;
         },
       }),
     [handleHorizontalDrag]

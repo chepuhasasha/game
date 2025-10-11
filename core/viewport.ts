@@ -41,6 +41,7 @@ export class Viewport {
   private rotationVelocityThreshold = 1e-4;
   private rotationSensitivity = 0.005;
   private lastDeltaTime = 1 / 60;
+  private lastGestureAngularVelocity = 0;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -212,32 +213,74 @@ export class Viewport {
 
   /**
    * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости.
-   * Сохраняет инерцию, используя скорость жеста, если она отлична от нуля,
-   * и возвращается к расчёту по смещению, когда данных о скорости недостаточно.
+   * Сохраняет инерцию, используя скорость жеста или рассчитанную угловую скорость,
+   * и корректно обрабатывает финальное отпускание, чтобы инерция не пропадала.
    * @param {number} deltaX Изменение жеста по оси X в пикселях.
    * @param {number} [velocityX] Горизонтальная скорость жеста в пикселях в секунду.
+   * @param {number} [deltaTime] Интервал времени между событиями жеста в секундах.
+   * @param {boolean} [isFinal=false] Признак завершающего события жеста.
    * @returns {void}
    */
-  rotateHorizontally(deltaX: number, velocityX?: number): void {
+  rotateHorizontally(
+    deltaX: number,
+    velocityX?: number,
+    deltaTime?: number,
+    isFinal = false
+  ): void {
     if (!this.camera) return;
     if (this.orbitRadius === 0) return;
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
-    this.pendingRotationDelta += deltaAngle;
+    if (deltaAngle !== 0) {
+      this.pendingRotationDelta += deltaAngle;
+    }
 
+    const previousGestureVelocity = this.lastGestureAngularVelocity;
     const hasGestureVelocity =
       typeof velocityX === "number" && Number.isFinite(velocityX);
+    const hasDeltaTime = typeof deltaTime === "number" && deltaTime > 0;
 
-    if (hasGestureVelocity) {
-      const angularVelocity = -velocityX * this.rotationSensitivity;
-      if (Math.abs(angularVelocity) > this.rotationVelocityThreshold) {
-        this.rotationVelocity = angularVelocity;
-        return;
+    let nextVelocity: number | null = null;
+
+    if (deltaAngle !== 0 && hasDeltaTime) {
+      const candidate = deltaAngle / (deltaTime as number);
+      if (Number.isFinite(candidate)) {
+        nextVelocity = candidate;
       }
     }
 
-    const dt = this.lastDeltaTime > 0 ? this.lastDeltaTime : 1 / 60;
-    this.rotationVelocity = deltaAngle / dt;
+    if (nextVelocity === null && hasGestureVelocity) {
+      const candidate = -(velocityX as number) * this.rotationSensitivity;
+      if (Number.isFinite(candidate)) {
+        nextVelocity = candidate;
+      }
+    }
+
+    if (nextVelocity === null && deltaAngle !== 0) {
+      const dt = this.lastDeltaTime > 0 ? this.lastDeltaTime : 1 / 60;
+      const candidate = deltaAngle / dt;
+      if (Number.isFinite(candidate)) {
+        nextVelocity = candidate;
+      }
+    }
+
+    if (nextVelocity !== null) {
+      this.rotationVelocity = nextVelocity;
+    } else if (!isFinal && !hasGestureVelocity && deltaAngle === 0) {
+      this.rotationVelocity = 0;
+    }
+
+    if (
+      isFinal &&
+      (nextVelocity === null ||
+        Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold)
+    ) {
+      if (Math.abs(previousGestureVelocity) > this.rotationVelocityThreshold) {
+        this.rotationVelocity = previousGestureVelocity;
+      }
+    }
+
+    this.lastGestureAngularVelocity = this.rotationVelocity;
   }
 
   /**
