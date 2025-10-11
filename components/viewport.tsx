@@ -23,11 +23,15 @@ export const ViewPort = (): JSX.Element => {
   /**
    * Обрабатывает изменение горизонтального свайпа и вращает сцену.
    * @param {number} deltaX Смещение пальца по горизонтали в пикселях.
+   * @param {number} velocityX Горизонтальная скорость жеста в пикселях в секунду.
    * @returns {void}
    */
-  const handleHorizontalDrag = useCallback((deltaX: number): void => {
-    viewport.current?.rotateHorizontally(deltaX);
-  }, []);
+  const handleHorizontalDrag = useCallback(
+    (deltaX: number, velocityX: number): void => {
+      viewport.current?.rotateHorizontally(deltaX, velocityX);
+    },
+    []
+  );
 
   /**
    * Обработчик создания контекста OpenGL, инициализирующий сцену Three.js.
@@ -89,7 +93,7 @@ export const ViewPort = (): JSX.Element => {
         onPanResponderMove: (_, gestureState) => {
           const deltaX = gestureState.dx - lastDx.current;
           lastDx.current = gestureState.dx;
-          handleHorizontalDrag(deltaX);
+          handleHorizontalDrag(deltaX, gestureState.vx);
         },
         onPanResponderRelease: () => {
           lastDx.current = 0;

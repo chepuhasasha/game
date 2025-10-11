@@ -213,14 +213,20 @@ export class Viewport {
   /**
    * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости.
    * @param {number} deltaX Изменение жеста по оси X в пикселях.
+   * @param {number} [velocityX] Горизонтальная скорость жеста в пикселях в секунду.
    * @returns {void}
    */
-  rotateHorizontally(deltaX: number): void {
+  rotateHorizontally(deltaX: number, velocityX?: number): void {
     if (!this.camera) return;
     if (this.orbitRadius === 0) return;
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
+    if (typeof velocityX === "number" && Number.isFinite(velocityX)) {
+      this.rotationVelocity = -velocityX * this.rotationSensitivity;
+      return;
+    }
+
     const dt = this.lastDeltaTime || 1 / 60;
     this.rotationVelocity = deltaAngle / dt;
   }
