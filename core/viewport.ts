@@ -43,7 +43,7 @@ export class Viewport {
   init(): void {
     const { w, h } = this.size();
     this.scene = new Scene();
-    this.scene.background = new Color("#111");
+    this.scene.background = new Color("#181818");
 
     this.camera = this.makeCamera(w, h);
     this.camera.position.set(5, 4, 5);
@@ -54,8 +54,8 @@ export class Viewport {
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
 
-    this.scene.add(new AmbientLight(0xffffff, 0.7));
-    const dir = new DirectionalLight(0xffffff, 1);
+    this.scene.add(new AmbientLight(0xffffff, 1.1));
+    const dir = new DirectionalLight(0xffffff, 1.4);
     dir.position.set(5, 8, 3);
     this.scene.add(dir);
 
@@ -205,5 +205,6 @@ export class Viewport {
     room.dispose();
     this.environmentTarget = target;
     this.scene.environment = target.texture;
+    this.scene.environmentIntensity = 1.5;
   }
 }

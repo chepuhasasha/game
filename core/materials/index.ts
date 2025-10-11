@@ -74,11 +74,11 @@ const ensureMultisampleFallback = (renderer: WebGLRenderer): void => {
 export const configureRendererPhysicMaterials = (renderer: WebGLRenderer): void => {
   ensureMultisampleFallback(renderer);
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.4;
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.useLegacyLights = false;
 };
 
 
-export * from './standart'
-export * from './glass'
+export * from "./standart";
+export * from "./glass";
