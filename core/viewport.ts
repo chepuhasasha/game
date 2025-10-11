@@ -212,6 +212,8 @@ export class Viewport {
 
   /**
    * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости.
+   * Сохраняет инерцию, используя скорость жеста, если она отлична от нуля,
+   * и возвращается к расчёту по смещению, когда данных о скорости недостаточно.
    * @param {number} deltaX Изменение жеста по оси X в пикселях.
    * @param {number} [velocityX] Горизонтальная скорость жеста в пикселях в секунду.
    * @returns {void}
@@ -222,12 +224,19 @@ export class Viewport {
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
-    if (typeof velocityX === "number" && Number.isFinite(velocityX)) {
-      this.rotationVelocity = -velocityX * this.rotationSensitivity;
-      return;
+
+    const hasGestureVelocity =
+      typeof velocityX === "number" && Number.isFinite(velocityX);
+
+    if (hasGestureVelocity) {
+      const angularVelocity = -velocityX * this.rotationSensitivity;
+      if (Math.abs(angularVelocity) > this.rotationVelocityThreshold) {
+        this.rotationVelocity = angularVelocity;
+        return;
+      }
     }
 
-    const dt = this.lastDeltaTime || 1 / 60;
+    const dt = this.lastDeltaTime > 0 ? this.lastDeltaTime : 1 / 60;
     this.rotationVelocity = deltaAngle / dt;
   }
 
