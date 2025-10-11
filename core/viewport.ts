@@ -44,7 +44,7 @@ export class Viewport {
     this.camera.position.set(5, 4, 5);
     this.camera.lookAt(this.target);
 
-    this.renderer = new Renderer({ gl: this.gl, antialias: true });
+    this.renderer = new Renderer({ gl: this.gl, antialias: false });
     configureRendererForGlass(this.renderer);
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
