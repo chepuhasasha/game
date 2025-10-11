@@ -207,7 +207,7 @@ export class Viewport {
     if (this.orbitRadius === 0) return;
 
     const sensitivity = 0.005;
-    this.horizontalAngle += deltaX * sensitivity;
+    this.horizontalAngle -= deltaX * sensitivity;
 
     const x = this.target.x + Math.sin(this.horizontalAngle) * this.orbitRadius;
     const z = this.target.z + Math.cos(this.horizontalAngle) * this.orbitRadius;
