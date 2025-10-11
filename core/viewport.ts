@@ -35,6 +35,11 @@ export class Viewport {
   private rotationStepSize = Math.PI / 24;
   private rotationStepAccumulator = 0;
   private rotationStepCallback: ((direction: 1 | -1) => void) | null = null;
+  private rotationVelocity = 0;
+  private pendingRotationDelta = 0;
+  private rotationFriction = 6;
+  private rotationVelocityThreshold = 1e-4;
+  private lastDeltaTime = 1 / 60;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -159,6 +164,10 @@ export class Viewport {
   private loop = (t = 0): void => {
     const dt = this.last ? (t - this.last) / 1000 : 0;
     this.last = t;
+    if (dt > 0) {
+      this.lastDeltaTime = dt;
+    }
+    this.updateCameraRotation(dt);
     this.updatables.forEach((u) => u.update(dt));
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
@@ -211,6 +220,18 @@ export class Viewport {
 
     const sensitivity = 0.005;
     const deltaAngle = -deltaX * sensitivity;
+    this.pendingRotationDelta += deltaAngle;
+    const dt = this.lastDeltaTime || 1 / 60;
+    this.rotationVelocity = deltaAngle / dt;
+  }
+
+  /**
+   * Применяет изменение горизонтального угла камеры и обновляет позицию.
+   * Также уведомляет обратный вызов о прохождении дискретных шагов.
+   * @param {number} deltaAngle Изменение угла в радианах.
+   * @returns {void}
+   */
+  private applyHorizontalAngleDelta(deltaAngle: number): void {
     this.horizontalAngle += deltaAngle;
 
     this.rotationStepAccumulator += deltaAngle;
@@ -225,6 +246,36 @@ export class Viewport {
 
     this.camera.position.set(x, this.cameraHeight, z);
     this.camera.lookAt(this.target);
+  }
+
+  /**
+   * Обновляет вращение камеры с учётом инерции и накопленных изменений.
+   * @param {number} dt Дельта времени между кадрами в секундах.
+   * @returns {void}
+   */
+  private updateCameraRotation(dt: number): void {
+    if (!this.camera) return;
+
+    if (this.pendingRotationDelta !== 0) {
+      this.applyHorizontalAngleDelta(this.pendingRotationDelta);
+      this.pendingRotationDelta = 0;
+    }
+
+    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
+      this.rotationVelocity = 0;
+      return;
+    }
+
+    const damping = dt > 0 ? Math.exp(-this.rotationFriction * dt) : 1;
+    this.rotationVelocity *= damping;
+
+    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
+      this.rotationVelocity = 0;
+      return;
+    }
+
+    const deltaAngle = this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
+    this.applyHorizontalAngleDelta(deltaAngle);
   }
 
   /**
