@@ -85,17 +85,20 @@ export const ViewPort = (): JSX.Element => {
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           lastDx.current = 0;
+          viewport.current?.beginHorizontalDrag();
         },
         onPanResponderMove: (_, gestureState) => {
           const deltaX = gestureState.dx - lastDx.current;
           lastDx.current = gestureState.dx;
           handleHorizontalDrag(deltaX);
         },
-        onPanResponderRelease: () => {
+        onPanResponderRelease: (_, gestureState) => {
           lastDx.current = 0;
+          viewport.current?.endHorizontalDrag(gestureState.vx ?? 0);
         },
-        onPanResponderTerminate: () => {
+        onPanResponderTerminate: (_, gestureState) => {
           lastDx.current = 0;
+          viewport.current?.endHorizontalDrag(gestureState?.vx ?? 0);
         },
       }),
     [handleHorizontalDrag]

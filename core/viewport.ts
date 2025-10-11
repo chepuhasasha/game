@@ -41,6 +41,9 @@ export class Viewport {
   private rotationVelocityThreshold = 1e-4;
   private rotationSensitivity = 0.005;
   private lastDeltaTime = 1 / 60;
+  private isDraggingHorizontally = false;
+  private lastDragTimestamp = 0;
+  private lastRecordedDragVelocity = 0;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -221,8 +224,53 @@ export class Viewport {
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
-    const dt = this.lastDeltaTime || 1 / 60;
-    this.rotationVelocity = deltaAngle / dt;
+    const now = this.getTimestamp();
+
+    if (this.isDraggingHorizontally && this.lastDragTimestamp > 0) {
+      const dt = (now - this.lastDragTimestamp) / 1000;
+      if (dt > 0) {
+        this.lastRecordedDragVelocity = deltaAngle / dt;
+      }
+    } else {
+      this.isDraggingHorizontally = true;
+      this.lastRecordedDragVelocity = 0;
+    }
+
+    this.lastDragTimestamp = now;
+    this.rotationVelocity = 0;
+  }
+
+  /**
+   * Подготавливает горизонтальное вращение к началу перетаскивания пользователем.
+   * Сбрасывает инерцию и фиксирует текущее время для дальнейших расчётов скорости.
+   * @returns {void}
+   */
+  beginHorizontalDrag(): void {
+    this.isDraggingHorizontally = true;
+    this.rotationVelocity = 0;
+    this.lastRecordedDragVelocity = 0;
+    this.lastDragTimestamp = this.getTimestamp();
+  }
+
+  /**
+   * Завершает перетаскивание и запускает инерционное вращение с заданной скоростью.
+   * @param {number} velocityX Горизонтальная скорость жеста в пикселях в секунду.
+   * @returns {void}
+   */
+  endHorizontalDrag(velocityX: number): void {
+    let angularVelocity = this.lastRecordedDragVelocity;
+
+    if (Number.isFinite(velocityX) && velocityX !== 0) {
+      angularVelocity = -velocityX * this.rotationSensitivity;
+    }
+
+    if (!Number.isFinite(angularVelocity)) {
+      angularVelocity = 0;
+    }
+
+    this.isDraggingHorizontally = false;
+    this.lastDragTimestamp = 0;
+    this.rotationVelocity = angularVelocity;
   }
 
   /**
@@ -298,6 +346,11 @@ export class Viewport {
       this.pendingRotationDelta = 0;
     }
 
+    if (this.isDraggingHorizontally) {
+      this.rotationVelocity = 0;
+      return;
+    }
+
     if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
       this.rotationVelocity = 0;
       return;
@@ -313,6 +366,18 @@ export class Viewport {
 
     const deltaAngle = this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
     this.applyHorizontalAngleDelta(deltaAngle);
+  }
+
+  /**
+   * Возвращает временную метку с максимальной доступной точностью.
+   * @returns {number} Время в миллисекундах.
+   */
+  private getTimestamp(): number {
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+      return performance.now();
+    }
+
+    return Date.now();
   }
 
   /**
