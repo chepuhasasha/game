@@ -1,12 +1,7 @@
-import {
-  BoxGeometry,
-  BufferGeometry,
-  Material,
-  Mesh,
-} from "three";
+import { BoxGeometry, BufferGeometry, Material, Mesh } from "three";
 import type { Updatable } from "./updatable";
 import type { Box } from "./types";
-import materials from "./materials";
+import { materials } from "./materials";
 
 /** Простой вращающийся куб. */
 export class BoxObject extends Mesh implements Updatable {

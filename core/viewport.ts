@@ -11,6 +11,7 @@ import {
 } from "three";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
+import { configureRendererPhysicMaterials } from "./materials";
 
 export class Viewport {
   private scene!: Scene;
@@ -43,7 +44,8 @@ export class Viewport {
     this.camera.position.set(5, 4, 5);
     this.camera.lookAt(this.target);
 
-    this.renderer = new Renderer({ gl: this.gl, antialias: true });
+    this.renderer = new Renderer({ gl: this.gl, antialias: false });
+    configureRendererPhysicMaterials(this.renderer);
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
 

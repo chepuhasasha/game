@@ -1,3 +1,5 @@
+import type { MaterialName } from "./materials"
+
 export type BoxLocation = 'QUEUE' | 'BUFFER' | 'ACTIVE' | 'CONTAINER'
 
 export type BoxDebuff = 'FRAGILE' | 'NON_TILTABLE'
@@ -17,7 +19,7 @@ export interface Box {
   depth: number
   debuffs: BoxDebuff[]
   playerPosition?: Point
-  material: 'standart'
+  material: MaterialName
 }
 
 export interface GeneratedLevel {

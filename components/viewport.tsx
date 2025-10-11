@@ -28,7 +28,7 @@ export const ViewPort = (): JSX.Element => {
         width: 2,
         height: 2,
         depth: 2,
-        material: 'standart',
+        material: 'glass',
         debuffs: [],
         location: "CONTAINER",
       });
