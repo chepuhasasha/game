@@ -1,21 +1,51 @@
-import { BoxGeometry, BufferGeometry, Material, Mesh } from "three";
+import { BufferGeometry, Material, Mesh } from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Updatable } from "./updatable";
 import type { Box } from "./types";
 import { materials } from "./materials";
 
-/** Простой вращающийся куб. */
+const DEFAULT_CORNER_RATIO = 0.08;
+const DEFAULT_CORNER_SMOOTHNESS = 4;
+
+/** Простой вращающийся куб со скруглёнными рёбрами. */
 export class BoxObject extends Mesh implements Updatable {
   /**
    * Создаёт куб с базовым материалом.
-   * @param {number} size Размер ребра куба.
-   * @param {number} color Цвет материала в hex.
+   * @param {Box} box Параметры коробки.
    */
   constructor(box: Box) {
     super(
-      new BoxGeometry(box.width, box.height, box.depth),
+      new RoundedBoxGeometry(
+        box.width,
+        box.height,
+        box.depth,
+        BoxObject.resolveCornerSmoothness(box),
+        BoxObject.resolveCornerRadius(box)
+      ),
       materials[box.material]
     );
     this.position.set(box.position.x, box.position.y, box.position.z);
+  }
+
+  /**
+   * Вычисляет радиус скругления рёбер с учётом размеров коробки.
+   * @param {Box} box Параметры коробки.
+   * @returns {number} Допустимое значение радиуса скругления.
+   */
+  private static resolveCornerRadius(box: Box): number {
+    const minDimension = Math.min(box.width, box.height, box.depth);
+    const requested = minDimension * DEFAULT_CORNER_RATIO;
+    const maxRadius = minDimension / 2 - Number.EPSILON;
+    return Math.max(Math.min(requested, maxRadius), 0);
+  }
+
+  /**
+   * Определяет сглаженность скругления рёбер.
+   * @param {Box} box Параметры коробки.
+   * @returns {number} Количество сегментов для сглаживания.
+   */
+  private static resolveCornerSmoothness(box: Box): number {
+    return Math.max(Math.floor(DEFAULT_CORNER_SMOOTHNESS), 1);
   }
 
   /**
