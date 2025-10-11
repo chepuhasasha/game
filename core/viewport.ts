@@ -220,10 +220,14 @@ export class Viewport {
     if (!this.camera) return;
     if (this.orbitRadius === 0) return;
 
-    const deltaAngle = -deltaX * this.rotationSensitivity;
-    this.pendingRotationDelta += deltaAngle;
     const dt = this.lastDeltaTime || 1 / 60;
-    this.rotationVelocity = this.clampRotationVelocity(deltaAngle / dt);
+    const deltaAngle = -deltaX * this.rotationSensitivity;
+    const velocity = deltaAngle / dt;
+    const limitedVelocity = this.clampRotationVelocity(velocity);
+    const appliedDelta = limitedVelocity * dt;
+
+    this.pendingRotationDelta += appliedDelta;
+    this.rotationVelocity = limitedVelocity;
   }
 
   /**
@@ -240,7 +244,8 @@ export class Viewport {
    *   Множитель преобразования горизонтального жеста в радианы: влияет на скорость поворота
    *   камеры при перетаскивании, а также на исходную скорость инерции.
    * @param {number} [options.maxVelocity]
-   *   Максимальная по модулю угловая скорость вращения камеры. Бесконечность отключает ограничение.
+   *   Максимальная по модулю угловая скорость, которую пользователь может задать свайпом.
+   *   Бесконечность отключает ограничение.
    * @returns {void}
    */
   setRotationInertia({
@@ -315,7 +320,7 @@ export class Viewport {
     }
 
     const damping = dt > 0 ? Math.exp(-this.rotationFriction * dt) : 1;
-    this.rotationVelocity = this.clampRotationVelocity(this.rotationVelocity * damping);
+    this.rotationVelocity *= damping;
 
     if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
       this.rotationVelocity = 0;
@@ -327,7 +332,7 @@ export class Viewport {
   }
 
   /**
-   * Ограничивает скорость вращения камеры заданным максимумом.
+   * Ограничивает скорость вращения камеры, задаваемую жестом пользователя, заданным максимумом.
    * @param {number} velocity Исходная угловая скорость.
    * @returns {number} Ограниченная угловая скорость.
   */
