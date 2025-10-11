@@ -76,7 +76,7 @@ export const configureRendererPhysicMaterials = (renderer: WebGLRenderer): void 
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.physicallyCorrectLights = true; // Property 'physicallyCorrectLights' does not exist on type 'WebGLRenderer'.ts(2339)
+  renderer.useLegacyLights = false;
 };
 
 

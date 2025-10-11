@@ -8,7 +8,10 @@ import {
   DirectionalLight,
   Object3D,
   Vector3,
+  PMREMGenerator,
+  WebGLRenderTarget,
 } from "three";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
 import { configureRendererPhysicMaterials } from "./materials";
@@ -21,6 +24,8 @@ export class Viewport {
   private last = 0;
   private viewSize = 6;
   private updatables = new Set<Updatable>();
+  private pmremGenerator: PMREMGenerator | null = null;
+  private environmentTarget: WebGLRenderTarget | null = null;
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -53,6 +58,8 @@ export class Viewport {
     const dir = new DirectionalLight(0xffffff, 1);
     dir.position.set(5, 8, 3);
     this.scene.add(dir);
+
+    this.setupEnvironment();
 
     this.render();
   }
@@ -165,11 +172,38 @@ export class Viewport {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     this.clear();
+    this.scene.environment = null;
+    this.environmentTarget?.dispose();
+    this.environmentTarget = null;
+    this.pmremGenerator?.dispose();
+    this.pmremGenerator = null;
     this.renderer?.dispose();
   }
 
-  setZoom(z: number) {
+  /**
+   * Устанавливает масштаб ортографической камеры.
+   * @param {number} z Новое значение zoom.
+   * @returns {void}
+   */
+  setZoom(z: number): void {
     this.camera.zoom = z;
     this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * Создаёт HDR-окружение для отражающих материалов и стекла.
+   * @returns {void}
+   */
+  private setupEnvironment(): void {
+    this.environmentTarget?.dispose();
+    this.environmentTarget = null;
+    this.pmremGenerator?.dispose();
+    this.pmremGenerator = new PMREMGenerator(this.renderer);
+    this.pmremGenerator.compileCubemapShader();
+    const room = new RoomEnvironment();
+    const target = this.pmremGenerator.fromScene(room, 0.04);
+    room.dispose();
+    this.environmentTarget = target;
+    this.scene.environment = target.texture;
   }
 }
