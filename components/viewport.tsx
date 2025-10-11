@@ -25,14 +25,29 @@ export const ViewPort = (): JSX.Element => {
           y: 1,
           z: 1,
         },
-        width: 2,
-        height: 2,
-        depth: 2,
+        width: 1,
+        height: 1,
+        depth: 1,
         material: 'glass',
         debuffs: [],
         location: "CONTAINER",
       });
+      const box2 = new BoxObject({
+        id: 1,
+        position: {
+          x: -0.5,
+          y: 1,
+          z: -0.5,
+        },
+        width: 1,
+        height: 1,
+        depth: 1,
+        material: 'standart',
+        debuffs: [],
+        location: "CONTAINER",
+      });
       viewport.current.add(box)
+      viewport.current.add(box2)
     },
     []
   );
