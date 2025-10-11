@@ -20,6 +20,8 @@ export interface Box {
   debuffs: BoxDebuff[]
   playerPosition?: Point
   material: MaterialName
+  cornerRadius?: number
+  cornerSmoothness?: number
 }
 
 export interface GeneratedLevel {
