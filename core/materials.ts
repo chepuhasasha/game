@@ -1,73 +1,56 @@
-import { Color, DoubleSide, MeshStandardMaterial, ShaderMaterial } from "three";
+import {
+  ACESFilmicToneMapping,
+  Color,
+  DoubleSide,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  SRGBColorSpace,
+  WebGLRenderer,
+} from "three";
 
-const glassShaderMaterial = new ShaderMaterial({
-  uniforms: {
-    envColor: { value: new Color(0xf0f8ff) },
-    tintColor: { value: new Color(0xb0e0ff) },
-    fresnelPower: { value: 3.5 },
-    baseOpacity: { value: 0.2 },
-    refractiveIndex: { value: 1.1 },
-    blurStrength: { value: 0.15 },
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-
-    void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 envColor;
-    uniform vec3 tintColor;
-    uniform float fresnelPower;
-    uniform float baseOpacity;
-    uniform float refractiveIndex;
-    uniform float blurStrength;
-
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-
-    float pseudoNoise(vec3 p) {
-      vec3 seed = vec3(12.9898, 78.233, 37.719);
-      return fract(sin(dot(p, seed)) * 43758.5453);
-    }
-
-    void main() {
-      vec3 normal = normalize(vNormal);
-      vec3 viewDir = normalize(cameraPosition - vWorldPosition);
-
-      float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), fresnelPower);
-      vec3 refractDir = refract(-viewDir, normal, 1.0 / refractiveIndex);
-      float refractAmount = clamp(dot(refractDir, normal) * 0.5 + 0.5, 0.0, 1.0);
-
-      vec3 baseRefraction = mix(tintColor, envColor, refractAmount);
-
-      float blur = 0.0;
-      blur += pseudoNoise(refractDir * 1.3 + vWorldPosition * 0.1);
-      blur += pseudoNoise(refractDir * 2.7 + vWorldPosition * 0.15 + 13.0);
-      blur += pseudoNoise(refractDir * 4.1 + vWorldPosition * 0.07 + 29.0);
-      blur /= 3.0;
-
-      vec3 blurredRefraction = mix(baseRefraction, envColor, blur * blurStrength);
-      vec3 refractionColor = mix(baseRefraction, blurredRefraction, 0.7);
-
-      float highlight = pow(max(dot(normal, viewDir), 0.0), 24.0);
-      vec3 color = refractionColor + vec3(highlight);
-
-      float alpha = clamp(mix(baseOpacity, 1.0, fresnel), 0.0, 1.0);
-      gl_FragColor = vec4(color, alpha);
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-  side: DoubleSide,
-});
-
-export default {
-  standart: new MeshStandardMaterial({ color: 0xff0000 }),
-  glass: glassShaderMaterial,
+/**
+ * Настраивает рендерер для корректной работы физически корректного стекла.
+ * @param {WebGLRenderer} renderer Экземпляр WebGLRenderer, созданный Expo Three.
+ * @returns {void}
+ */
+export const configureRendererForGlass = (renderer: WebGLRenderer): void => {
+  renderer.toneMapping = ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.outputColorSpace = SRGBColorSpace;
+  renderer.physicallyCorrectLights = true;
 };
+
+/**
+ * Создаёт материал матового стекла с мягкими преломлениями и размытием.
+ * @returns {MeshPhysicalMaterial} Настроенный материал для стеклянных объектов.
+ */
+export const createMatteGlassMaterial = (): MeshPhysicalMaterial => {
+  const material = new MeshPhysicalMaterial({
+    color: new Color(0xd6eaff),
+    transmission: 1.0,
+    transparent: true,
+    roughness: 0.6,
+    metalness: 0.0,
+    thickness: 1.4,
+    ior: 1.46,
+    attenuationColor: new Color(0xb0d4ff),
+    attenuationDistance: 2.4,
+    clearcoat: 0.25,
+    clearcoatRoughness: 0.9,
+    specularIntensity: 0.85,
+    specularColor: new Color(0xffffff),
+    envMapIntensity: 1.0,
+  });
+  material.side = DoubleSide;
+  material.toneMapped = true;
+  material.sheen = 0.25;
+  material.sheenRoughness = 0.85;
+  return material;
+};
+
+const materials = {
+  standart: new MeshStandardMaterial({ color: 0xff0000 }),
+  glass: createMatteGlassMaterial(),
+};
+
+export default materials;

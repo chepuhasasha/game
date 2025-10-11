@@ -11,6 +11,7 @@ import {
 } from "three";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
+import { configureRendererForGlass } from "./materials";
 
 export class Viewport {
   private scene!: Scene;
@@ -44,6 +45,7 @@ export class Viewport {
     this.camera.lookAt(this.target);
 
     this.renderer = new Renderer({ gl: this.gl, antialias: true });
+    configureRendererForGlass(this.renderer);
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
 
@@ -166,7 +168,12 @@ export class Viewport {
     this.renderer?.dispose();
   }
 
-  setZoom(z: number) {
+  /**
+   * Устанавливает кратность приближения ортографической камеры.
+   * @param {number} z Новое значение zoom (1 = без изменений).
+   * @returns {void}
+   */
+  setZoom(z: number): void {
     this.camera.zoom = z;
     this.camera.updateProjectionMatrix();
   }
