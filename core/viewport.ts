@@ -32,6 +32,9 @@ export class Viewport {
   private orbitRadius = 1;
   private horizontalAngle = 0;
   private cameraHeight = 0;
+  private rotationStepSize = Math.PI / 24;
+  private rotationStepAccumulator = 0;
+  private rotationStepCallback: ((direction: 1 | -1) => void) | null = null;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -207,13 +210,36 @@ export class Viewport {
     if (this.orbitRadius === 0) return;
 
     const sensitivity = 0.005;
-    this.horizontalAngle -= deltaX * sensitivity;
+    const deltaAngle = -deltaX * sensitivity;
+    this.horizontalAngle += deltaAngle;
+
+    this.rotationStepAccumulator += deltaAngle;
+    while (Math.abs(this.rotationStepAccumulator) >= this.rotationStepSize) {
+      const direction = this.rotationStepAccumulator > 0 ? 1 : -1;
+      this.rotationStepAccumulator -= this.rotationStepSize * direction;
+      this.rotationStepCallback?.(direction);
+    }
 
     const x = this.target.x + Math.sin(this.horizontalAngle) * this.orbitRadius;
     const z = this.target.z + Math.cos(this.horizontalAngle) * this.orbitRadius;
 
     this.camera.position.set(x, this.cameraHeight, z);
     this.camera.lookAt(this.target);
+  }
+
+  /**
+   * Настраивает обратную связь при прохождении дискретных шагов вращения.
+   * @param {number} stepAngle Угол в радианах между шагами вибрации.
+   * @param {(direction: 1 | -1) => void} callback Колбэк, вызываемый при каждом шаге.
+   * @returns {void}
+   */
+  setRotationStepFeedback(
+    stepAngle: number,
+    callback: (direction: 1 | -1) => void
+  ): void {
+    this.rotationStepSize = Math.max(Math.abs(stepAngle), Number.EPSILON);
+    this.rotationStepAccumulator = 0;
+    this.rotationStepCallback = callback;
   }
 
   /**
