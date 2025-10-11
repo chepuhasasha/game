@@ -71,14 +71,15 @@ const ensureMultisampleFallback = (renderer: WebGLRenderer): void => {
  * @param {WebGLRenderer} renderer Экземпляр WebGLRenderer, созданный Expo Three.
  * @returns {void}
  */
-export const configureRendererPhysicMaterials = (renderer: WebGLRenderer): void => {
+export const configureRendererPhysicMaterials = (
+  renderer: WebGLRenderer
+): void => {
   ensureMultisampleFallback(renderer);
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
+  renderer.toneMappingExposure = 1.4;
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.physicallyCorrectLights = true; // Property 'physicallyCorrectLights' does not exist on type 'WebGLRenderer'.ts(2339)
+  renderer.useLegacyLights = false; // -Property 'useLegacyLights' does not exist on type 'WebGLRenderer'.ts(2339)
 };
 
-
-export * from './standart'
-export * from './glass'
+export * from "./standart";
+export * from "./glass";
