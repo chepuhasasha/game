@@ -17,7 +17,7 @@ export interface Box {
   depth: number
   debuffs: BoxDebuff[]
   playerPosition?: Point
-  material: 'standart'
+  material: 'standart' | 'glass'
 }
 
 export interface GeneratedLevel {
