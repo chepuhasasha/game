@@ -39,6 +39,7 @@ export class Viewport {
   private pendingRotationDelta = 0;
   private rotationFriction = 6;
   private rotationVelocityThreshold = 1e-4;
+  private rotationSensitivity = 0.005;
   private lastDeltaTime = 1 / 60;
 
   /**
@@ -218,11 +219,37 @@ export class Viewport {
     if (!this.camera) return;
     if (this.orbitRadius === 0) return;
 
-    const sensitivity = 0.005;
-    const deltaAngle = -deltaX * sensitivity;
+    const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
     const dt = this.lastDeltaTime || 1 / 60;
     this.rotationVelocity = deltaAngle / dt;
+  }
+
+  /**
+   * Настраивает параметры инерции горизонтального вращения камеры.
+   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options Параметры инерции.
+   * @returns {void}
+   */
+  setRotationInertia({
+    friction,
+    velocityThreshold,
+    sensitivity,
+  }: {
+    friction?: number;
+    velocityThreshold?: number;
+    sensitivity?: number;
+  }): void {
+    if (typeof friction === "number" && Number.isFinite(friction)) {
+      this.rotationFriction = Math.max(0, friction);
+    }
+
+    if (typeof velocityThreshold === "number" && Number.isFinite(velocityThreshold)) {
+      this.rotationVelocityThreshold = Math.max(0, velocityThreshold);
+    }
+
+    if (typeof sensitivity === "number" && Number.isFinite(sensitivity)) {
+      this.rotationSensitivity = Math.max(0, sensitivity);
+    }
   }
 
   /**
