@@ -6,8 +6,10 @@ import {
   PanResponder,
   PanResponderGestureState,
   PanResponderInstance,
+  StyleProp,
   StyleSheet,
   View,
+  ViewStyle,
 } from "react-native";
 
 const HANDLE_SIZE = 48;
@@ -59,6 +61,7 @@ export const RectJoystick = ({
   const [handleOffset, setHandleOffset] = useState<HandleOffset>(
     INITIAL_HANDLE_OFFSET
   );
+  const [isPressed, setIsPressed] = useState(false);
   const lastDxRef = useRef(0);
 
   /**
@@ -118,20 +121,42 @@ export const RectJoystick = ({
   );
 
   /**
-   * Сбрасывает позицию бегунка при завершении жеста.
+   * Сбрасывает позицию бегунка и возвращает визуальное состояние по умолчанию при завершении жеста.
    * @returns {void}
    */
   const handlePanEnd = useCallback((): void => {
+    setIsPressed(false);
     resetHandlePosition();
   }, [resetHandlePosition]);
 
   /**
-   * Подготавливает состояние к началу обработки свайпа.
+   * Подготавливает состояние к началу обработки свайпа и включает визуальный эффект нажатия.
    * @returns {void}
    */
   const handlePanStart = useCallback((): void => {
+    setIsPressed(true);
     resetHandlePosition();
   }, [resetHandlePosition]);
+
+  /**
+   * Формирует визуальный стиль бегунка с учётом нажатия и текущего смещения.
+   * @returns {StyleProp<ViewStyle>} Объединённый стиль для отображения бегунка.
+   */
+  const handleStyle = useMemo<StyleProp<ViewStyle>>(() => {
+    return [
+      styles.handle,
+      {
+        backgroundColor: isPressed
+          ? "rgba(255,255,255, 1)"
+          : "rgba(255,255,255, 0.4)",
+        transform: [
+          { translateX: handleOffset.x },
+          { translateY: handleOffset.y },
+          { scale: isPressed ? 1.2 : 1 },
+        ],
+      },
+    ];
+  }, [handleOffset.x, handleOffset.y, isPressed]);
 
   /**
    * Определяет, следует ли назначать обработчик жестов на событие начала касания.
@@ -185,15 +210,7 @@ export const RectJoystick = ({
     >
       <View
         pointerEvents="none"
-        style={[
-          styles.handle,
-          {
-            transform: [
-              { translateX: handleOffset.x },
-              { translateY: handleOffset.y },
-            ],
-          },
-        ]}
+        style={handleStyle}
       />
     </View>
   );
@@ -214,6 +231,5 @@ const styles = StyleSheet.create({
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
     borderRadius: "50%",
-    backgroundColor: "rgba(255,255,255, 1)",
   },
 });
