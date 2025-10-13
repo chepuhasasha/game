@@ -21,6 +21,7 @@ import {
   Viewport,
   RotationRingObject,
 } from "@/core";
+import { RectJoystick } from "./rect-joystick";
 
 type LayoutSize = {
   width: number;
@@ -474,7 +475,7 @@ export const ViewPort = ({
 
     restZoomRef.current = instance.getZoom();
     const targetZoom = Math.min(
-      restZoomRef.current -0.001,
+      restZoomRef.current - 0.001,
       ROTATION_ACTIVE_CAMERA_ZOOM
     );
     instance.smoothZoomTo(targetZoom);
@@ -547,19 +548,27 @@ export const ViewPort = ({
   }, []);
 
   return (
-    <View style={styles.container} onLayout={handleLayout}>
-      <GLView style={styles.glView} onContextCreate={handleContextCreate} />
-      {layout.width > 0 && layout.height > 0 ? (
-        <View pointerEvents="box-none" style={styles.overlay}>
-          <View {...panResponder.panHandlers} style={styles.rotationRing} />
-        </View>
-      ) : null}
+    <View style={styles.container}>
+      <View onLayout={handleLayout} style={styles.sceneContainer}>
+        <GLView style={styles.glView} onContextCreate={handleContextCreate} />
+        {layout.width > 0 && layout.height > 0 ? (
+          <View pointerEvents="box-none" style={styles.overlay}>
+            <View {...panResponder.panHandlers} style={styles.rotationRing} />
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.controlsArea}>
+        <RectJoystick onHorizontalDrag={handleHorizontalDrag} />
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  sceneContainer: {
     flex: 1,
   },
   glView: {
@@ -571,5 +580,11 @@ const styles = StyleSheet.create({
   },
   rotationRing: {
     ...StyleSheet.absoluteFillObject,
+  },
+  controlsArea: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 16,
+    backgroundColor: "#000000",
   },
 });
