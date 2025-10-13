@@ -10,13 +10,19 @@ const vertexShader = /* glsl */ `
   varying vec2 vUv;
   uniform float time;
 
+  float wave(float value, float offset, float speed, float amplitude) {
+    return sin(value + time * speed + offset) * amplitude;
+  }
+
   void main() {
     vUv = uv;
     vec3 transformed = position;
 
-    float waveX = sin(position.x * 4.0 + time * 1.8) * 0.035;
-    float waveZ = cos(position.z * 5.0 - time * 1.5) * 0.03;
-    transformed.y += waveX + waveZ;
+    float surfaceRipple = wave(position.x * 3.5, 0.0, 1.3, 0.02);
+    surfaceRipple += wave(position.z * 4.2, 1.2, 1.6, 0.018);
+    surfaceRipple += wave(position.x * 2.1 + position.z * 1.4, 2.4, 0.9, 0.012);
+
+    transformed.y += surfaceRipple;
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
   }
@@ -49,43 +55,59 @@ const fragmentShader = /* glsl */ `
     return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
   }
 
+  mat2 rotate2d(float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return mat2(c, -s, s, c);
+  }
+
   float fbm(vec2 p) {
     float value = 0.0;
     float amplitude = 0.5;
     mat2 rotation = mat2(0.8, -0.6, 0.6, 0.8);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
       value += amplitude * noise(p);
-      p = rotation * p * 2.0;
+      p = rotation * p * 2.05;
       amplitude *= 0.5;
     }
 
     return value;
   }
 
+  vec2 domainWarp(vec2 p, vec2 flow, float t) {
+    vec2 warp = vec2(fbm(p + flow * t), fbm(p + rotate2d(1.256) * flow * t));
+    warp *= 0.7;
+    warp += vec2(fbm(p * 2.0 - flow.yx * t * 1.3), fbm(p * 2.3 + flow.xy * t * 1.1)) * 0.45;
+    return p + warp;
+  }
+
   void main() {
     vec2 centeredUv = vUv - 0.5;
-    vec2 flow = normalize(flowDirection);
+    vec2 flow = normalize(flowDirection + 0.0001);
+    float t = time * 0.8;
 
-    float swirl = fbm(centeredUv * 3.5 + flow * time * 0.6);
-    vec2 warped = centeredUv;
-    warped += vec2(fbm(centeredUv * 5.0 + time * 0.4), fbm(centeredUv * 5.0 - time * 0.35)) * 0.35;
-    warped += flow.yx * fbm(centeredUv * 4.0 - flow * time * 0.5) * 0.2;
+    vec2 warpedUv = domainWarp(centeredUv * 3.2, flow, t);
+    vec2 secondaryWarp = domainWarp(warpedUv * 1.8, flow.yx, t * 1.35);
 
-    float liquidPattern = fbm(warped * 6.0 + flow * time * 1.2);
-    float highlightMask = smoothstep(0.4, 0.9, fbm(warped * 8.0 - flow.yx * time * 0.8));
+    float primaryLayer = fbm(warpedUv + flow * t * 1.4);
+    float secondaryLayer = fbm(secondaryWarp - flow.yx * t * 0.9);
+    float swirl = fbm(rotate2d(t * 0.3) * (centeredUv * 2.4));
 
-    float blend = smoothstep(0.2, 0.8, liquidPattern + swirl * 0.6);
-    vec3 color = mix(baseColor, secondaryColor, blend);
+    float pattern = mix(primaryLayer, secondaryLayer, 0.55) + swirl * 0.35;
+    float contrastPattern = smoothstep(0.25, 0.75, pattern);
 
-    float caustics = pow(highlightMask, 3.0);
-    color = mix(color, highlightColor, caustics * 0.6);
+    vec3 color = mix(baseColor, secondaryColor, contrastPattern);
 
-    float edgeGlow = smoothstep(0.4, 0.9, length(centeredUv));
-    float shimmer = fbm(warped * 10.0 + time * 1.5) * 0.3;
-    color += highlightColor * shimmer * 0.2 * (1.0 - edgeGlow);
+    float highlightMask = smoothstep(0.65, 0.92, pattern + fbm(warpedUv * 2.8 + t * 1.7) * 0.35);
+    float shimmer = fbm(secondaryWarp * 3.2 + t * 2.0);
 
-    float animatedOpacity = clamp(opacity + shimmer * 0.2, 0.0, 1.0);
+    color += highlightColor * shimmer * 0.25;
+    color = mix(color, highlightColor, pow(highlightMask, 3.5) * 0.55);
+
+    float edgeFade = smoothstep(0.9, 0.2, length(centeredUv));
+    float animatedOpacity = clamp(opacity * edgeFade + shimmer * 0.15, 0.0, 1.0);
+
     gl_FragColor = vec4(color, animatedOpacity);
   }
 `;
