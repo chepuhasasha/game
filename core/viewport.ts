@@ -10,6 +10,8 @@ import {
   Vector3,
   PMREMGenerator,
   WebGLRenderTarget,
+  Box3,
+  Matrix4,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { Updatable } from "./updatable";
@@ -26,12 +28,13 @@ export class Viewport {
   private updatables = new Set<Updatable>();
   private pmremGenerator: PMREMGenerator | null = null;
   private environmentTarget: WebGLRenderTarget | null = null;
+  private contentRoot: Object3D | null = null;
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
   private orbitRadius = 1;
   private horizontalAngle = 0;
-  private cameraHeight = 0;
+  private cameraHeightOffset = 0;
   private rotationStepSize = Math.PI / 24;
   private rotationStepAccumulator = 0;
   private rotationStepCallback: ((direction: 1 | -1) => void) | null = null;
@@ -60,10 +63,12 @@ export class Viewport {
     this.camera = this.makeCamera(w, h);
     this.camera.position.set(5, 4, 5);
     this.camera.lookAt(this.target);
+    this.contentRoot = new Object3D();
+    this.scene.add(this.contentRoot);
     const offset = new Vector3().copy(this.camera.position).sub(this.target);
     this.orbitRadius = Math.sqrt(offset.x ** 2 + offset.z ** 2);
     this.horizontalAngle = Math.atan2(offset.x, offset.z);
-    this.cameraHeight = this.camera.position.y;
+    this.cameraHeightOffset = offset.y;
 
     this.renderer = new Renderer({ gl: this.gl, antialias: false });
     configureRendererPhysicMaterials(this.renderer);
@@ -117,7 +122,11 @@ export class Viewport {
    * @returns {void}
    */
   add(obj: Object3D): void {
-    this.scene.add(obj);
+    if (this.contentRoot) {
+      this.contentRoot.add(obj);
+    } else {
+      this.scene.add(obj);
+    }
     const maybeUpdatable = obj as unknown as Partial<Updatable>;
     if (typeof maybeUpdatable.update === "function") {
       this.updatables.add(maybeUpdatable as Updatable);
@@ -131,7 +140,11 @@ export class Viewport {
    * @returns {void}
    */
   remove(obj: Object3D): void {
-    this.scene.remove(obj);
+    if (this.contentRoot) {
+      this.contentRoot.remove(obj);
+    } else {
+      this.scene.remove(obj);
+    }
     this.updatables.delete(obj as unknown as Updatable);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
@@ -143,6 +156,12 @@ export class Viewport {
    * @returns {void}
    */
   clear(): void {
+    if (this.contentRoot) {
+      const toRemove = [...this.contentRoot.children];
+      toRemove.forEach((child) => this.remove(child));
+      return;
+    }
+
     const keep = new Set([this.camera]);
     const toRemove: Object3D[] = [];
     this.scene.children.forEach((child) => {
@@ -278,11 +297,7 @@ export class Viewport {
       this.rotationStepCallback?.(direction);
     }
 
-    const x = this.target.x + Math.sin(this.horizontalAngle) * this.orbitRadius;
-    const z = this.target.z + Math.cos(this.horizontalAngle) * this.orbitRadius;
-
-    this.camera.position.set(x, this.cameraHeight, z);
-    this.camera.lookAt(this.target);
+    this.updateCameraPositionFromOrbit();
   }
 
   /**
@@ -316,6 +331,19 @@ export class Viewport {
   }
 
   /**
+   * Пересчитывает позицию камеры исходя из текущей орбиты вокруг цели.
+   * @returns {void}
+   */
+  private updateCameraPositionFromOrbit(): void {
+    if (!this.camera) return;
+    const x = this.target.x + Math.sin(this.horizontalAngle) * this.orbitRadius;
+    const z = this.target.z + Math.cos(this.horizontalAngle) * this.orbitRadius;
+    const y = this.target.y + this.cameraHeightOffset;
+    this.camera.position.set(x, y, z);
+    this.camera.lookAt(this.target);
+  }
+
+  /**
    * Настраивает обратную связь при прохождении дискретных шагов вращения.
    * @param {number} stepAngle Угол в радианах между шагами вибрации.
    * @param {(direction: 1 | -1) => void} callback Колбэк, вызываемый при каждом шаге.
@@ -346,5 +374,70 @@ export class Viewport {
     this.environmentTarget = target;
     this.scene.environment = target.texture;
     this.scene.environmentIntensity = 1.5;
+  }
+
+  /**
+   * Подбирает zoom ортографической камеры так, чтобы весь контент попадал в кадр.
+   * Центр кадра совмещается с центром сцены, а также учитывается заданный отступ.
+   * @param {number} [marginRatio=0.1] Дополнительный отступ к размеру сцены (0.1 = 10%).
+   * @returns {void}
+   */
+  fitToContent(marginRatio = 0.1): void {
+    if (!this.camera || !this.contentRoot) return;
+
+    const box = new Box3().setFromObject(this.contentRoot);
+    if (!Number.isFinite(box.min.x) || box.isEmpty()) {
+      return;
+    }
+
+    const center = new Vector3();
+    box.getCenter(center);
+    this.target.copy(center);
+    this.updateCameraPositionFromOrbit();
+
+    this.camera.updateMatrixWorld(true);
+    const matrix = new Matrix4().copy(this.camera.matrixWorldInverse);
+
+    const corners = [
+      new Vector3(box.min.x, box.min.y, box.min.z),
+      new Vector3(box.min.x, box.min.y, box.max.z),
+      new Vector3(box.min.x, box.max.y, box.min.z),
+      new Vector3(box.min.x, box.max.y, box.max.z),
+      new Vector3(box.max.x, box.min.y, box.min.z),
+      new Vector3(box.max.x, box.min.y, box.max.z),
+      new Vector3(box.max.x, box.max.y, box.min.z),
+      new Vector3(box.max.x, box.max.y, box.max.z),
+    ];
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    corners.forEach((corner) => {
+      const projected = corner.clone().applyMatrix4(matrix);
+      minX = Math.min(minX, projected.x);
+      maxX = Math.max(maxX, projected.x);
+      minY = Math.min(minY, projected.y);
+      maxY = Math.max(maxY, projected.y);
+    });
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    const baseWidth = this.camera.right - this.camera.left;
+    const baseHeight = this.camera.top - this.camera.bottom;
+    const marginMultiplier = 1 + Math.max(0, marginRatio);
+
+    const effectiveWidth = Math.max(width * marginMultiplier, Number.EPSILON);
+    const effectiveHeight = Math.max(height * marginMultiplier, Number.EPSILON);
+
+    const zoomX = baseWidth / effectiveWidth;
+    const zoomY = baseHeight / effectiveHeight;
+    const nextZoom = Math.min(zoomX, zoomY);
+
+    if (Number.isFinite(nextZoom) && nextZoom > 0) {
+      this.setZoom(nextZoom);
+    }
   }
 }

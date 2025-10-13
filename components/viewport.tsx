@@ -3,7 +3,7 @@ import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
-import { BoxObject, generateBoxes,createRng, Viewport } from "@/core";
+import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
 
@@ -38,12 +38,11 @@ export const ViewPort = (): JSX.Element => {
     (gl: ExpoWebGLRenderingContext): void => {
       viewport.current = new Viewport(gl);
       viewport.current.init();
-      viewport.current.setZoom(0.3);
       viewport.current.setRotationStepFeedback(
         ROTATION_STEP_ANGLE,
         handleRotationStep
       );
-      const rnd = createRng(123456)
+      const rnd = createRng(123456);
       const boxes = generateBoxes(
         6,
         6,
@@ -59,6 +58,7 @@ export const ViewPort = (): JSX.Element => {
         });
         viewport.current?.add(box);
       });
+      viewport.current?.fitToContent();
     },
     [handleRotationStep]
   );
