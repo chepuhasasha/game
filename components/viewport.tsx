@@ -3,14 +3,10 @@ import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
-import { Audio } from "expo-av";
+import { Audio, AVPlaybackStatus } from "expo-av";
 import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
-
-type RotationStepStatusHandler =
-  NonNullable<InstanceType<typeof Audio.Sound>["setOnPlaybackStatusUpdate"]>;
-type RotationStepPlaybackStatus = Parameters<RotationStepStatusHandler>[0];
 
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
@@ -25,11 +21,11 @@ export const ViewPort = (): JSX.Element => {
 
     /**
      * Обрабатывает обновления статуса воспроизведения звука шага вращения.
-     * @param {RotationStepPlaybackStatus} status Текущий статус воспроизведения.
+     * @param {AVPlaybackStatus} status Текущий статус воспроизведения.
      * @returns {void}
      */
     const handleRotationStepSoundStatus = (
-      status: RotationStepPlaybackStatus
+      status: AVPlaybackStatus
     ): void => {
       if (!status.isLoaded) {
         isRotationStepSoundLoadedRef.current = false;
@@ -88,7 +84,7 @@ export const ViewPort = (): JSX.Element => {
     }
 
     if (isRotationStepSoundPlayingRef.current) {
-      void sound.setStatusAsync({ positionMillis: 0, shouldPlay: true });
+      void sound.setStatusAsync({ positionMillis: 0, shouldPlay: true, volume: 0.1 });
       return;
     }
 
