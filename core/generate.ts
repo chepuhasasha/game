@@ -1,4 +1,4 @@
-import { Box} from './types'
+import { Box } from "./types";
 
 type Axis = "x" | "y" | "z";
 
@@ -12,7 +12,7 @@ type Axis = "x" | "y" | "z";
  * const rnd = createRng(123);
  * const a = rnd(); // 0..1
  */
-function createRng(seed?: number): () => number {
+export function createRng(seed?: number): () => number {
   if (seed === undefined) return Math.random;
   let s = seed >>> 0 || 1;
   return () => {
@@ -182,12 +182,11 @@ function splitBoxByAxisCenter(
 export function generateBoxes(
   size: number,
   cuts: number,
-  seed?: number
+  rnd: () => number
 ): Box[] {
   const maxCuts = Math.pow(size, 3) - 1;
   if (cuts > maxCuts) throw new RangeError(`Максимум разрезов: ${maxCuts}.`);
 
-  const rnd = createRng(seed);
   const boxes: Box[] = [
     { x: 0, y: 0, z: 0, width: size, height: size, depth: size },
   ];
