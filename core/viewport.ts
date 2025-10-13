@@ -30,6 +30,10 @@ export class Viewport {
   private environmentTarget: WebGLRenderTarget | null = null;
   private contentRoot: Object3D | null = null;
   private fitExclusions = new Set<Object3D>();
+  private readonly screenRayOrigin = new Vector3();
+  private readonly screenRayTarget = new Vector3();
+  private readonly screenRayDirection = new Vector3();
+  private readonly screenIntersectionPoint = new Vector3();
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -96,6 +100,19 @@ export class Viewport {
   }
 
   /**
+   * Предоставляет размеры буфера рендеринга в пикселях для расчётов вьюпорта.
+   * @returns {{ width: number; height: number } | null} Объект с шириной и высотой либо null.
+   */
+  getViewportSize(): { width: number; height: number } | null {
+    const { w, h } = this.size();
+    if (w === 0 || h === 0) {
+      return null;
+    }
+
+    return { width: w, height: h };
+  }
+
+  /**
    * Создаёт ортографическую камеру под заданный размер вьюпорта.
    * @param {number} w Ширина.
    * @param {number} h Высота.
@@ -114,6 +131,54 @@ export class Viewport {
     );
     cam.updateProjectionMatrix();
     return cam;
+  }
+
+  /**
+   * Находит точку пересечения луча из экрана с горизонтальной плоскостью на заданной высоте.
+   * @param {number} screenX Горизонтальная координата экрана в пикселях.
+   * @param {number} screenY Вертикальная координата экрана в пикселях.
+   * @param {number} planeY Высота плоскости в мировых координатах.
+   * @returns {Vector3 | null} Точка пересечения в мировых координатах либо null, если пересечения нет.
+   */
+  screenPointToWorldOnPlane(
+    screenX: number,
+    screenY: number,
+    planeY: number
+  ): Vector3 | null {
+    if (!this.camera) {
+      return null;
+    }
+
+    const { w, h } = this.size();
+    if (w === 0 || h === 0) {
+      return null;
+    }
+
+    const ndcX = (screenX / w) * 2 - 1;
+    const ndcY = -((screenY / h) * 2 - 1);
+
+    const origin = this.screenRayOrigin.set(ndcX, ndcY, -1).unproject(this.camera);
+    const target = this.screenRayTarget.set(ndcX, ndcY, 1).unproject(this.camera);
+    const direction = this.screenRayDirection.copy(target).sub(origin);
+
+    if (direction.lengthSq() === 0) {
+      return null;
+    }
+
+    direction.normalize();
+    const denominator = direction.y;
+
+    if (Math.abs(denominator) < 1e-6) {
+      return null;
+    }
+
+    const t = (planeY - origin.y) / denominator;
+
+    if (!Number.isFinite(t) || t < 0) {
+      return null;
+    }
+
+    return this.screenIntersectionPoint.copy(origin).add(direction.multiplyScalar(t));
   }
 
   /**

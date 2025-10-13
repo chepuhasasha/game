@@ -9,7 +9,7 @@ import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
 
-// eslint-disable-next-line import/no-unresolved
+ 
 import { Audio, AVPlaybackStatus } from "expo-av";
 import {
   BoxObject,
@@ -20,9 +20,6 @@ import {
 } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
-const ROTATION_RING_OUTER_RADIUS_RATIO = 0.45;
-const ROTATION_RING_THICKNESS_RATIO = 0.2;
-const ROTATION_RING_MIN_THICKNESS = 24;
 const CONTAINER_SIZE = 6;
 const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
 const RING_INNER_MARGIN = 0.6;
@@ -49,6 +46,7 @@ export const ViewPort = ({
   const isRotationStepSoundLoadedRef = useRef(false);
   const isRotationStepSoundPlayingRef = useRef(false);
   const isRotationGestureActiveRef = useRef(false);
+  const ringRadiiRef = useRef<{ inner: number; outer: number } | null>(null);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -198,51 +196,52 @@ export const ViewPort = ({
     });
   }, []);
 
-  const rotationRingMetrics = useMemo(() => {
-    const minSide = Math.min(layout.width, layout.height);
-    if (minSide === 0) {
-      return null;
-    }
-
-    const outerRadius = minSide * ROTATION_RING_OUTER_RADIUS_RATIO;
-    const thickness = Math.max(
-      outerRadius * ROTATION_RING_THICKNESS_RATIO,
-      ROTATION_RING_MIN_THICKNESS
-    );
-    const innerRadius = Math.max(outerRadius - thickness, 0);
-    const diameter = outerRadius * 2;
-
-    return {
-      outerRadius,
-      innerRadius,
-      diameter,
-      thickness: outerRadius - innerRadius,
-    } as const;
-  }, [layout.height, layout.width]);
-
   /**
-   * Проверяет, находится ли точка внутри интерактивного кольца вращения.
-   * @param {number} x Координата X точки относительно кольца.
-   * @param {number} y Координата Y точки относительно кольца.
-   * @returns {boolean} Возвращает true, если точка попадает в кольцо.
+   * Проверяет, находится ли точка касания в пределах кольца вращения с учётом проекции.
+   * @param {number} x Координата X точки касания внутри оверлея в пикселях.
+   * @param {number} y Координата Y точки касания внутри оверлея в пикселях.
+   * @returns {boolean} Возвращает true, если касание попадает на кольцо.
    */
   const isPointInRotationRing = useCallback(
     (x: number, y: number): boolean => {
-      if (!rotationRingMetrics) {
+      const instance = viewport.current;
+      const ringRadii = ringRadiiRef.current;
+
+      if (
+        !instance ||
+        !ringRadii ||
+        layout.width === 0 ||
+        layout.height === 0
+      ) {
         return false;
       }
 
-      const center = rotationRingMetrics.diameter / 2;
-      const dx = x - center;
-      const dy = y - center;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const viewportSize = instance.getViewportSize();
+      if (!viewportSize) {
+        return false;
+      }
+
+      const scaleX = viewportSize.width / layout.width;
+      const scaleY = viewportSize.height / layout.height;
+
+      const worldPoint = instance.screenPointToWorldOnPlane(
+        x * scaleX,
+        y * scaleY,
+        RING_FLOOR_OFFSET
+      );
+
+      if (!worldPoint) {
+        return false;
+      }
+
+      const distance = Math.hypot(worldPoint.x, worldPoint.z);
 
       return (
-        distance >= rotationRingMetrics.innerRadius &&
-        distance <= rotationRingMetrics.outerRadius
+        distance >= ringRadii.inner &&
+        distance <= ringRadii.outer
       );
     },
-    [rotationRingMetrics]
+    [layout.height, layout.width]
   );
 
   /**
@@ -274,6 +273,10 @@ export const ViewPort = ({
       const halfDiagonal = Math.sqrt(2) * (CONTAINER_SIZE / 2);
       const ringInnerRadius = halfDiagonal + RING_INNER_MARGIN;
       const ringOuterRadius = ringInnerRadius + RING_WIDTH;
+      ringRadiiRef.current = {
+        inner: ringInnerRadius,
+        outer: ringOuterRadius,
+      };
       const rotationRing = new RotationRingObject({
         innerRadius: ringInnerRadius,
         outerRadius: ringOuterRadius,
@@ -340,21 +343,11 @@ export const ViewPort = ({
   return (
     <View style={styles.container} onLayout={handleLayout}>
       <GLView style={styles.glView} onContextCreate={handleContextCreate} />
-      {rotationRingMetrics ? (
+      {layout.width > 0 && layout.height > 0 ? (
         <View pointerEvents="box-none" style={styles.overlay}>
           <View
             {...panResponder.panHandlers}
-            style={[
-              styles.rotationRing,
-              {
-                width: rotationRingMetrics.diameter,
-                height: rotationRingMetrics.diameter,
-                borderRadius: rotationRingMetrics.diameter / 2,
-                borderWidth: Math.max(rotationRingMetrics.thickness, 1),
-                left: (layout.width - rotationRingMetrics.diameter) / 2,
-                top: (layout.height - rotationRingMetrics.diameter) / 2,
-              },
-            ]}
+            style={styles.rotationRing}
           />
         </View>
       ) : null}
@@ -374,8 +367,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   rotationRing: {
-    position: "absolute",
-    borderColor: "transparent",
-    backgroundColor: "transparent",
+    ...StyleSheet.absoluteFillObject,
   },
 });
