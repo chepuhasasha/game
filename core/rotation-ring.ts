@@ -27,7 +27,7 @@ export class RotationRingObject extends Group implements Updatable {
     innerRadius,
     outerRadius,
     positionY = 0,
-    tickCount = 20,
+    tickCount = 40,
     tickHeight = 0.04,
     tickWidth = 0.04,
     tickDepth = 2,

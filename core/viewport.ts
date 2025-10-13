@@ -49,6 +49,10 @@ export class Viewport {
   private rotationVelocityThreshold = 1e-4;
   private rotationSensitivity = 0.005;
   private lastDeltaTime = 1 / 60;
+  private zoom = 1;
+  private targetZoom = 1;
+  private zoomTransitionSpeed = 40;
+  private readonly zoomEpsilon = 1e-4;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -301,6 +305,7 @@ export class Viewport {
       this.lastDeltaTime = dt;
     }
     this.updateCameraRotation(dt);
+    this.updateCameraZoom(dt);
     this.updatables.forEach((u) => u.update(dt));
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
@@ -338,8 +343,36 @@ export class Viewport {
    * @returns {void}
    */
   setZoom(z: number): void {
-    this.camera.zoom = z;
+    if (!Number.isFinite(z)) {
+      return;
+    }
+
+    const nextZoom = Math.max(Number.EPSILON, z);
+    this.zoom = nextZoom;
+    this.targetZoom = nextZoom;
+    this.camera.zoom = nextZoom;
     this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * Плавно изменяет zoom ортографической камеры к новому значению.
+   * @param {number} z Желаемое значение zoom.
+   * @returns {void}
+   */
+  smoothZoomTo(z: number): void {
+    if (!Number.isFinite(z)) {
+      return;
+    }
+
+    this.targetZoom = Math.max(Number.EPSILON, z);
+  }
+
+  /**
+   * Возвращает целевое значение zoom для ортографической камеры.
+   * @returns {number} Текущее целевое значение zoom.
+   */
+  getZoom(): number {
+    return this.targetZoom;
   }
 
   /**
@@ -445,6 +478,41 @@ export class Viewport {
     const deltaAngle =
       this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
     this.applyHorizontalAngleDelta(deltaAngle);
+  }
+
+  /**
+   * Постепенно приближает текущий zoom камеры к целевому значению.
+   * @param {number} dt Время между кадрами в секундах.
+   * @returns {void}
+   */
+  private updateCameraZoom(dt: number): void {
+    if (!this.camera) {
+      return;
+    }
+
+    const currentZoom = this.zoom;
+    const targetZoom = this.targetZoom;
+    if (Math.abs(currentZoom - targetZoom) <= this.zoomEpsilon) {
+      this.zoom = targetZoom;
+      const difference = Math.abs(this.camera.zoom - targetZoom);
+      this.camera.zoom = targetZoom;
+      if (difference > 0) {
+        this.camera.updateProjectionMatrix();
+      }
+      return;
+    }
+
+    const deltaTime = Math.max(0, dt);
+    const factor =
+      deltaTime > 0 ? 1 - Math.exp(-this.zoomTransitionSpeed * deltaTime) : 1;
+    const nextZoom = currentZoom + (targetZoom - currentZoom) * factor;
+    this.zoom = nextZoom;
+    const differenceToNext = Math.abs(this.camera.zoom - nextZoom);
+    this.camera.zoom = nextZoom;
+
+    if (differenceToNext > 0) {
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   /**

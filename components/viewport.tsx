@@ -37,6 +37,8 @@ type RotationRingPanResponderParams = {
   viewportRef: MutableRefObject<Viewport | null>;
   ringRadiiRef: MutableRefObject<RingRadii | null>;
   onHorizontalDrag: (deltaX: number) => void;
+  onRotateStart?: () => void;
+  onRotateEnd?: () => void;
 };
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
@@ -44,6 +46,8 @@ const CONTAINER_SIZE = 6;
 const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
 const RING_INNER_MARGIN = 0.6;
 const RING_WIDTH = 0.8;
+const DEFAULT_CAMERA_ZOOM = 0.3;
+const ROTATION_ACTIVE_CAMERA_ZOOM = 0.26;
 
 /**
  * Управляет жизненным циклом и воспроизведением звука шага вращения.
@@ -250,6 +254,8 @@ const useRotationRingPanResponder = ({
   viewportRef,
   ringRadiiRef,
   onHorizontalDrag,
+  onRotateStart,
+  onRotateEnd,
 }: RotationRingPanResponderParams): PanResponderInstance => {
   const lastDxRef = useRef(0);
   const isRotationGestureActiveRef = useRef(false);
@@ -268,8 +274,11 @@ const useRotationRingPanResponder = ({
    */
   const deactivateGesture = useCallback((): void => {
     lastDxRef.current = 0;
-    isRotationGestureActiveRef.current = false;
-  }, []);
+    if (isRotationGestureActiveRef.current) {
+      isRotationGestureActiveRef.current = false;
+      onRotateEnd?.();
+    }
+  }, [onRotateEnd]);
 
   /**
    * Проверяет, следует ли начинать обработку жеста на основании координат касания.
@@ -287,14 +296,15 @@ const useRotationRingPanResponder = ({
         ringRadiiRef.current
       );
 
-      if (shouldHandle) {
+      if (shouldHandle && !isRotationGestureActiveRef.current) {
         isRotationGestureActiveRef.current = true;
         resetGestureDelta();
+        onRotateStart?.();
       }
 
       return shouldHandle;
     },
-    [layout, resetGestureDelta, viewportRef, ringRadiiRef]
+    [layout, onRotateStart, resetGestureDelta, viewportRef, ringRadiiRef]
   );
 
   /**
@@ -436,6 +446,7 @@ export const ViewPort = ({
 }: ViewPortProps): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const ringRadiiRef = useRef<RingRadii | null>(null);
+  const restZoomRef = useRef<number>(DEFAULT_CAMERA_ZOOM);
   const [layout, setLayout] = useState<LayoutSize>({ width: 0, height: 0 });
   const { handleRotationStep } = useRotationFeedback({
     isSoundEnabled,
@@ -450,6 +461,33 @@ export const ViewPort = ({
   const handleHorizontalDrag = useCallback((deltaX: number): void => {
     viewport.current?.rotateHorizontally(deltaX);
   }, []);
+
+  /**
+   * Сохраняет исходный zoom камеры и плавно отдаляет её при начале вращения.
+   * @returns {void}
+   */
+  const handleRotationGestureStart = useCallback((): void => {
+    const instance = viewport.current;
+    if (!instance) {
+      return;
+    }
+
+    restZoomRef.current = instance.getZoom();
+    instance.smoothZoomTo(ROTATION_ACTIVE_CAMERA_ZOOM);
+  }, [restZoomRef, viewport]);
+
+  /**
+   * Возвращает камеру к исходному zoom после завершения жеста вращения.
+   * @returns {void}
+   */
+  const handleRotationGestureEnd = useCallback((): void => {
+    const instance = viewport.current;
+    if (!instance) {
+      return;
+    }
+
+    instance.smoothZoomTo(restZoomRef.current);
+  }, [restZoomRef, viewport]);
 
   /**
    * Обновляет размеры контейнера и пересчитывает границы кольца вращения.
@@ -472,6 +510,8 @@ export const ViewPort = ({
     viewportRef: viewport,
     ringRadiiRef,
     onHorizontalDrag: handleHorizontalDrag,
+    onRotateStart: handleRotationGestureStart,
+    onRotateEnd: handleRotationGestureEnd,
   });
 
   /**
@@ -484,11 +524,12 @@ export const ViewPort = ({
       const instance = new Viewport(gl);
       viewport.current = instance;
       instance.init();
-      instance.setZoom(0.3);
+      instance.setZoom(DEFAULT_CAMERA_ZOOM);
       instance.setRotationStepFeedback(ROTATION_STEP_ANGLE, handleRotationStep);
       ringRadiiRef.current = populateViewportContent(instance);
+      restZoomRef.current = instance.getZoom();
     },
-    [handleRotationStep]
+    [handleRotationStep, restZoomRef]
   );
 
   /**
