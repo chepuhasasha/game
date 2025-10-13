@@ -10,6 +10,7 @@ const ROTATION_STEP_ANGLE = Math.PI / 18;
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const lastDx = useRef(0);
+  let lastStepTime = Date.now()
 
   /**
    * Вызывает лёгкую вибрацию при прохождении шага вращения.
@@ -17,7 +18,11 @@ export const ViewPort = (): JSX.Element => {
    * @returns {void}
    */
   const handleRotationStep = useCallback((_: 1 | -1): void => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const time = Date.now()
+    if(time - lastStepTime >= 100) {
+      lastStepTime = time
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   }, []);
 
   /**
