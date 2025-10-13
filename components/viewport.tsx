@@ -279,7 +279,7 @@ export const ViewPort = ({
         outerRadius: ringOuterRadius,
         positionY: RING_FLOOR_OFFSET,
       });
-      viewport.current?.add(rotationRing);
+      viewport.current?.add(rotationRing, { excludeFromFit: true });
       viewport.current?.fitToContent();
     },
     [handleRotationStep]

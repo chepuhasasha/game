@@ -29,6 +29,7 @@ export class Viewport {
   private pmremGenerator: PMREMGenerator | null = null;
   private environmentTarget: WebGLRenderTarget | null = null;
   private contentRoot: Object3D | null = null;
+  private fitExclusions = new Set<Object3D>();
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -118,15 +119,22 @@ export class Viewport {
   /**
    * Добавляет объект на сцену.
    * Если у объекта есть метод update, регистрирует его для кадровых обновлений.
+   * При передаче флага excludeFromFit объект будет игнорироваться при fitToContent.
    * @param {Object3D} obj Трёхмерный объект.
+   * @param {{ excludeFromFit?: boolean }} [options] Параметры добавления объекта.
    * @returns {void}
    */
-  add(obj: Object3D): void {
+  add(obj: Object3D, options?: { excludeFromFit?: boolean }): void {
     if (this.contentRoot) {
       this.contentRoot.add(obj);
     } else {
       this.scene.add(obj);
     }
+
+    if (options?.excludeFromFit) {
+      this.fitExclusions.add(obj);
+    }
+
     const maybeUpdatable = obj as unknown as Partial<Updatable>;
     if (typeof maybeUpdatable.update === "function") {
       this.updatables.add(maybeUpdatable as Updatable);
@@ -145,9 +153,43 @@ export class Viewport {
     } else {
       this.scene.remove(obj);
     }
+    this.fitExclusions.delete(obj);
     this.updatables.delete(obj as unknown as Updatable);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
+  }
+
+  /**
+   * Вычисляет ограничивающий параллелепипед для объектов сцены, учитываемых fitToContent.
+   * @returns {Box3 | null} Объём ограничивающего параллелепипеда или null, если нет объектов.
+   */
+  private computeFitBoundingBox(): Box3 | null {
+    if (!this.contentRoot) {
+      return null;
+    }
+
+    const box = new Box3();
+    let hasBox = false;
+
+    for (const child of this.contentRoot.children) {
+      if (this.fitExclusions.has(child)) {
+        continue;
+      }
+
+      const childBox = new Box3().setFromObject(child);
+      if (!Number.isFinite(childBox.min.x) || childBox.isEmpty()) {
+        continue;
+      }
+
+      if (!hasBox) {
+        box.copy(childBox);
+        hasBox = true;
+      } else {
+        box.union(childBox);
+      }
+    }
+
+    return hasBox ? box : null;
   }
 
   /**
@@ -387,10 +429,10 @@ export class Viewport {
    * @returns {void}
    */
   fitToContent(marginRatio = 0.1): void {
-    if (!this.camera || !this.contentRoot) return;
+    if (!this.camera) return;
 
-    const box = new Box3().setFromObject(this.contentRoot);
-    if (!Number.isFinite(box.min.x) || box.isEmpty()) {
+    const box = this.computeFitBoundingBox();
+    if (!box) {
       return;
     }
 
