@@ -557,9 +557,9 @@ export const ViewPort = ({
           </View>
         ) : null}
       </View>
-      <View style={styles.controlsArea}>
+      {/* <View style={styles.controlsArea}>
         <RectJoystick onHorizontalDrag={handleHorizontalDrag} />
-      </View>
+      </View> */}
     </View>
   );
 };
