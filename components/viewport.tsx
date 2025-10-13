@@ -21,7 +21,6 @@ import {
   Viewport,
   RotationRingObject,
 } from "@/core";
-import { RectJoystick } from "./rect-joystick";
 
 type LayoutSize = {
   width: number;
@@ -33,6 +32,12 @@ type RingRadii = {
   outer: number;
 };
 
+type RotationRingPointerState = {
+  locationX: number | null;
+  locationY: number | null;
+  isActive: boolean;
+};
+
 type RotationRingPanResponderParams = {
   layout: LayoutSize;
   viewportRef: MutableRefObject<Viewport | null>;
@@ -40,6 +45,7 @@ type RotationRingPanResponderParams = {
   onHorizontalDrag: (deltaX: number) => void;
   onRotateStart?: () => void;
   onRotateEnd?: () => void;
+  onPointerLocationChange?: (state: RotationRingPointerState) => void;
 };
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
@@ -257,6 +263,7 @@ const useRotationRingPanResponder = ({
   onHorizontalDrag,
   onRotateStart,
   onRotateEnd,
+  onPointerLocationChange,
 }: RotationRingPanResponderParams): PanResponderInstance => {
   const lastDxRef = useRef(0);
   const isRotationGestureActiveRef = useRef(false);
@@ -278,8 +285,13 @@ const useRotationRingPanResponder = ({
     if (isRotationGestureActiveRef.current) {
       isRotationGestureActiveRef.current = false;
       onRotateEnd?.();
+      onPointerLocationChange?.({
+        locationX: null,
+        locationY: null,
+        isActive: false,
+      });
     }
-  }, [onRotateEnd]);
+  }, [onPointerLocationChange, onRotateEnd]);
 
   /**
    * Проверяет, следует ли начинать обработку жеста на основании координат касания.
@@ -301,11 +313,23 @@ const useRotationRingPanResponder = ({
         isRotationGestureActiveRef.current = true;
         resetGestureDelta();
         onRotateStart?.();
+        onPointerLocationChange?.({
+          locationX,
+          locationY,
+          isActive: true,
+        });
       }
 
       return shouldHandle;
     },
-    [layout, onRotateStart, resetGestureDelta, viewportRef, ringRadiiRef]
+    [
+      layout,
+      onPointerLocationChange,
+      onRotateStart,
+      resetGestureDelta,
+      viewportRef,
+      ringRadiiRef,
+    ]
   );
 
   /**
@@ -367,9 +391,19 @@ const useRotationRingPanResponder = ({
       _event: GestureResponderEvent,
       gestureState: PanResponderGestureState
     ): void => {
+      const targetEvent = _event.nativeEvent;
+
+      if (isRotationGestureActiveRef.current) {
+        onPointerLocationChange?.({
+          locationX: targetEvent.locationX,
+          locationY: targetEvent.locationY,
+          isActive: true,
+        });
+      }
+
       handlePanMove(gestureState);
     },
-    [handlePanMove]
+    [handlePanMove, onPointerLocationChange]
   );
 
   /**
@@ -495,6 +529,53 @@ export const ViewPort = ({
   }, [restZoomRef, viewport]);
 
   /**
+   * Обновляет мировую цель для глаз коробок на основе координат пальца игрока.
+   * @param {RotationRingPointerState} state Текущее состояние касания в оверлее.
+   * @returns {void}
+   */
+  const handlePointerLocationChange = useCallback(
+    ({ locationX, locationY, isActive }: RotationRingPointerState): void => {
+      const instance = viewport.current;
+      if (!instance) {
+        BoxObject.setEyeTarget(null);
+        return;
+      }
+
+      if (!isActive || locationX === null || locationY === null) {
+        BoxObject.setEyeTarget(null);
+        return;
+      }
+
+      if (layout.width === 0 || layout.height === 0) {
+        BoxObject.setEyeTarget(null);
+        return;
+      }
+
+      const viewportSize = instance.getViewportSize();
+      if (!viewportSize) {
+        BoxObject.setEyeTarget(null);
+        return;
+      }
+
+      const scaleX = viewportSize.width / layout.width;
+      const scaleY = viewportSize.height / layout.height;
+      const worldPoint = instance.screenPointToWorldOnPlane(
+        locationX * scaleX,
+        locationY * scaleY,
+        0
+      );
+
+      if (!worldPoint) {
+        BoxObject.setEyeTarget(null);
+        return;
+      }
+
+      BoxObject.setEyeTarget(worldPoint);
+    },
+    [layout, viewport]
+  );
+
+  /**
    * Обновляет размеры контейнера и пересчитывает границы кольца вращения.
    * @param {LayoutChangeEvent} event Событие изменения раскладки контейнера.
    * @returns {void}
@@ -517,6 +598,7 @@ export const ViewPort = ({
     onHorizontalDrag: handleHorizontalDrag,
     onRotateStart: handleRotationGestureStart,
     onRotateEnd: handleRotationGestureEnd,
+    onPointerLocationChange: handlePointerLocationChange,
   });
 
   /**
@@ -533,6 +615,7 @@ export const ViewPort = ({
       instance.setRotationStepFeedback(ROTATION_STEP_ANGLE, handleRotationStep);
       ringRadiiRef.current = populateViewportContent(instance);
       restZoomRef.current = instance.getZoom();
+      BoxObject.setEyeTarget(null);
     },
     [handleRotationStep, restZoomRef]
   );
@@ -542,6 +625,7 @@ export const ViewPort = ({
    */
   useEffect(() => {
     return () => {
+      BoxObject.setEyeTarget(null);
       viewport.current?.dispose();
       viewport.current = null;
     };
