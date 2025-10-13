@@ -6,6 +6,12 @@ import {
   Vector2,
 } from "three";
 
+type LiquidShaderMaterial = ShaderMaterial & {
+  uniforms: ShaderMaterial["uniforms"] & {
+    time: { value: number };
+  };
+};
+
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
   uniform float time;
@@ -128,7 +134,7 @@ export type LiquidMaterialOptions = {
  */
 export const createLiquidMaterial = (
   options: LiquidMaterialOptions = {}
-): ShaderMaterial => {
+): LiquidShaderMaterial => {
   const {
     baseColor = new Color(0x1f4fc9),
     secondaryColor = new Color(0x29f1d1),
@@ -151,27 +157,58 @@ export const createLiquidMaterial = (
     vertexShader,
     fragmentShader,
     ...shaderParameters,
-  });
+  }) as LiquidShaderMaterial;
 
   material.extensions = { ...material.extensions, derivatives: true };
+
+  const getNow = () =>
+    (typeof performance !== "undefined" ? performance.now() : Date.now()) *
+    0.001;
+
+  let lastTimestamp = getNow();
+  let animationFrameId: number | null = null;
+
+  const autoUpdate = () => {
+    const currentTimestamp = getNow();
+    material.uniforms.time.value += currentTimestamp - lastTimestamp;
+    lastTimestamp = currentTimestamp;
+
+    if (typeof requestAnimationFrame === "function") {
+      animationFrameId = requestAnimationFrame(autoUpdate);
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    animationFrameId = requestAnimationFrame(autoUpdate);
+
+    const originalDispose = material.dispose.bind(material);
+    material.dispose = () => {
+      if (typeof cancelAnimationFrame === "function" && animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = null;
+      originalDispose();
+    };
+  }
 
   return material;
 };
 
 /**
- * Обновляет значение uniform-переменной времени, создавая анимацию течения жидкости.
+ * Увеличивает uniform времени материала «liquid», позволяя управлять анимацией вручную.
  * @param {ShaderMaterial} material Материал, созданный функцией createLiquidMaterial.
- * @param {number} elapsedTime Текущее время в секундах, используемое для анимации.
- * @returns {void}
+ * @param {number} deltaSeconds Изменение времени в секундах, которое нужно добавить к uniform.
  */
 export const updateLiquidMaterialTime = (
   material: ShaderMaterial,
-  elapsedTime: number
+  deltaSeconds: number
 ): void => {
-  const uniform = material.uniforms?.time;
-  if (!uniform) {
+  const liquidMaterial = material as LiquidShaderMaterial;
+
+  if (!liquidMaterial.uniforms?.time) {
     return;
   }
 
-  uniform.value = elapsedTime;
+  liquidMaterial.uniforms.time.value += deltaSeconds;
 };
