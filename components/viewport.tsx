@@ -27,10 +27,12 @@ const CONTAINER_SIZE = 6;
 const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
 const RING_INNER_MARGIN = 0.6;
 const RING_WIDTH = 0.8;
+const RING_RADIAL_SEGMENTS = 96;
 const RING_TICK_COUNT = 96;
 const RING_TICK_HEIGHT = 0.18;
 const RING_TICK_WIDTH = 0.05;
 const RING_TICK_DEPTH = 0.25;
+const RING_ROTATION_SPEED = Math.PI / 10;
 
 type ViewPortProps = {
   isSoundEnabled: boolean;
@@ -54,9 +56,6 @@ export const ViewPort = ({
   const isRotationStepSoundPlayingRef = useRef(false);
   const isRotationGestureActiveRef = useRef(false);
   const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const [ringOverlayCenter, setRingOverlayCenter] = useState<
-    { x: number; y: number } | null
-  >(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -284,55 +283,23 @@ export const ViewPort = ({
       const rotationRing = new RotationRingObject({
         innerRadius: ringInnerRadius,
         outerRadius: ringOuterRadius,
+        radialSegments: RING_RADIAL_SEGMENTS,
         positionY: RING_FLOOR_OFFSET,
+        color: "#6e7dff",
         tickColor: "#eaf1ff",
         tickCount: RING_TICK_COUNT,
         tickHeight: RING_TICK_HEIGHT,
         tickWidth: RING_TICK_WIDTH,
         tickDepth: RING_TICK_DEPTH,
+        rotationSpeed: RING_ROTATION_SPEED,
         metalness: 0.5,
         roughness: 0.5,
       });
       viewport.current?.add(rotationRing);
       viewport.current?.fitToContent();
-
-      const projectedCenter = viewport.current?.projectWorldToScreen({
-        x: 0,
-        y: RING_FLOOR_OFFSET,
-        z: 0,
-      });
-
-      if (projectedCenter) {
-        setRingOverlayCenter(projectedCenter);
-      }
     },
     [handleRotationStep]
   );
-
-  useEffect(() => {
-    if (!rotationRingMetrics) {
-      setRingOverlayCenter(null);
-      return;
-    }
-
-    const projectedCenter = viewport.current?.projectWorldToScreen({
-      x: 0,
-      y: RING_FLOOR_OFFSET,
-      z: 0,
-    });
-
-    if (projectedCenter) {
-      setRingOverlayCenter(projectedCenter);
-      return;
-    }
-
-    if (layout.width > 0 && layout.height > 0) {
-      setRingOverlayCenter({
-        x: layout.width / 2,
-        y: layout.height / 2,
-      });
-    }
-  }, [layout.height, layout.width, rotationRingMetrics]);
 
   const panResponder = useMemo(
     () =>
@@ -400,12 +367,8 @@ export const ViewPort = ({
                 height: rotationRingMetrics.diameter,
                 borderRadius: rotationRingMetrics.diameter / 2,
                 borderWidth: Math.max(rotationRingMetrics.thickness, 1),
-                left:
-                  (ringOverlayCenter?.x ?? layout.width / 2) -
-                  rotationRingMetrics.diameter / 2,
-                top:
-                  (ringOverlayCenter?.y ?? layout.height / 2) -
-                  rotationRingMetrics.diameter / 2,
+                left: (layout.width - rotationRingMetrics.diameter) / 2,
+                top: (layout.height - rotationRingMetrics.diameter) / 2,
               },
             ]}
           />
