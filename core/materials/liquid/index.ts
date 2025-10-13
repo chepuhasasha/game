@@ -33,9 +33,9 @@ export type LiquidMaterial = MeshPhysicalMaterial & {
  */
 export const createLiquidMaterial = (): LiquidMaterial => {
   const material = new MeshPhysicalMaterial({
-    color: new Color(0x124b63),
-    roughness: 0.35,
-    metalness: 0.04,
+    color: new Color(0x0d3a4f),
+    roughness: 0.22,
+    metalness: 0.03,
     transparent: false,
     depthWrite: true,
     transmission: 0.0,
@@ -45,17 +45,17 @@ export const createLiquidMaterial = (): LiquidMaterial => {
 
   const liquidUniforms: LiquidMaterialUniforms = {
     uTime: { value: 0 },
-    uSurfaceColor: { value: new Color(0x4bd9ff) },
-    uDepthColor: { value: new Color(0x05162a) },
-    uFresnelPower: { value: 3.25 },
-    uNoiseScale: { value: 1.4 },
-    uNormalDistortion: { value: 0.35 },
-    uDepthStrength: { value: 1.75 },
-    uFoamStrength: { value: 0.5 },
-    uFlowDirectionA: { value: new Vector2(0.65, 0.25) },
-    uFlowDirectionB: { value: new Vector2(-0.4, 0.55) },
-    uFlowSpeedA: { value: 0.35 },
-    uFlowSpeedB: { value: 0.22 },
+    uSurfaceColor: { value: new Color(0x3dd5ff) },
+    uDepthColor: { value: new Color(0x021024) },
+    uFresnelPower: { value: 3.5 },
+    uNoiseScale: { value: 1.6 },
+    uNormalDistortion: { value: 0.42 },
+    uDepthStrength: { value: 1.9 },
+    uFoamStrength: { value: 0.65 },
+    uFlowDirectionA: { value: new Vector2(0.55, 0.18) },
+    uFlowDirectionB: { value: new Vector2(-0.32, 0.47) },
+    uFlowSpeedA: { value: 0.42 },
+    uFlowSpeedB: { value: 0.28 },
   };
 
   material.onBeforeCompile = (shader: Shader) => {
@@ -160,13 +160,17 @@ export const createLiquidMaterial = (): LiquidMaterial => {
 
           float noiseA = fbm(flowSampleA * uNoiseScale);
           float noiseB = fbm(flowSampleB * uNoiseScale);
-          float liquidFlowSignal = noiseA - noiseB;
-          float liquidDepthMix = clamp(0.5 + 0.5 * liquidFlowSignal, 0.0, 1.0);
-          float liquidFoamMix = clamp(pow(abs(liquidFlowSignal), 3.0), 0.0, 1.0);
+          float baseFlowSignal = noiseA - noiseB;
+          float swirl = sin((flowSampleA.x + flowSampleB.y) * 4.5 + uTime * 0.9);
+          float wave = sin((flowSampleA.y - flowSampleB.x) * 6.0 - uTime * 1.25);
+          float combinedFlowSignal = baseFlowSignal * 0.65 + swirl * 0.25 + wave * 0.2;
+          float liquidDepthMix = clamp(0.5 + 0.5 * combinedFlowSignal, 0.0, 1.0);
+          float liquidFoamMix = clamp(pow(abs(combinedFlowSignal), 2.5), 0.0, 1.0);
+          float microRipples = clamp(fbm(flowSampleA * (uNoiseScale * 2.3)), 0.0, 1.0);
 
           vec3 flowNormalOffset = vec3(
-            dFdx(liquidFlowSignal),
-            dFdy(liquidFlowSignal),
+            dFdx(combinedFlowSignal),
+            dFdy(combinedFlowSignal),
             0.0
           );
           normal = normalize(normal + uNormalDistortion * flowNormalOffset);
@@ -177,20 +181,22 @@ export const createLiquidMaterial = (): LiquidMaterial => {
         `#include <lights_fragment_begin>
           vec3 worldNormal = normalize(vWorldNormal);
           vec3 viewDir = normalize(vViewDir);
-          float fresnelTerm = pow(1.0 - clamp(dot(worldNormal, viewDir), 0.0, 1.0), uFresnelPower);
-          vec3 depthTint = mix(
-            uDepthColor,
-            uSurfaceColor,
-            pow(liquidDepthMix, uDepthStrength)
+          float viewAlignment = clamp(dot(worldNormal, viewDir), 0.0, 1.0);
+          float fresnelTerm = pow(1.0 - viewAlignment, uFresnelPower);
+          float edgeIntensity = pow(1.0 - viewAlignment, 2.0);
+          float depthFactor = clamp(
+            pow(liquidDepthMix, uDepthStrength) + edgeIntensity * 0.45,
+            0.0,
+            1.0
           );
+          vec3 depthTint = mix(uDepthColor, uSurfaceColor, depthFactor);
 
-          diffuseColor.rgb = mix(diffuseColor.rgb, depthTint, 0.85);
-          diffuseColor.rgb += fresnelTerm * uFoamStrength * mix(
-            uSurfaceColor,
-            vec3(1.0),
-            liquidFoamMix
-          );
-          totalEmissiveRadiance += fresnelTerm * uFoamStrength * 0.15 * uSurfaceColor;
+          float foamMask = clamp(liquidFoamMix * 1.2 + edgeIntensity * 0.35, 0.0, 1.0);
+          vec3 foamColor = mix(uSurfaceColor, vec3(1.0), foamMask * 0.4);
+
+          diffuseColor.rgb = mix(diffuseColor.rgb, depthTint, 0.9);
+          diffuseColor.rgb += fresnelTerm * uFoamStrength * foamColor * (0.7 + microRipples * 0.6);
+          totalEmissiveRadiance += fresnelTerm * uFoamStrength * 0.12 * foamColor;
         `
       );
   };
