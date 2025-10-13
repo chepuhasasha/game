@@ -1,8 +1,29 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { JSX } from "react";
 
-import { ViewPort } from "@/components/viewport";
+import { ViewPort, type DifficultyOption } from "@/components/viewport";
+
+const DIFFICULTIES: DifficultyOption[] = [
+  {
+    id: "easy",
+    title: "Лёгкая",
+    boxCountRange: [3, 4],
+    matchThreshold: 0.85,
+  },
+  {
+    id: "medium",
+    title: "Средняя",
+    boxCountRange: [5, 6],
+    matchThreshold: 0.9,
+  },
+  {
+    id: "hard",
+    title: "Сложная",
+    boxCountRange: [7, 8],
+    matchThreshold: 0.93,
+  },
+];
 
 /**
  * Главный экран приложения со стартовым меню и трёхмерным вьюпортом.
@@ -12,6 +33,16 @@ export default function HomeScreen(): JSX.Element {
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isVibrationEnabled, setIsVibrationEnabled] = useState(true);
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [selectedDifficultyId, setSelectedDifficultyId] = useState<string>(
+    DIFFICULTIES[1]?.id ?? DIFFICULTIES[0].id
+  );
+
+  const selectedDifficulty = useMemo((): DifficultyOption => {
+    return (
+      DIFFICULTIES.find((item) => item.id === selectedDifficultyId) ??
+      DIFFICULTIES[0]
+    );
+  }, [selectedDifficultyId]);
 
   /**
    * Переключает состояние звука между включённым и выключенным режимами.
@@ -30,6 +61,15 @@ export default function HomeScreen(): JSX.Element {
   }, []);
 
   /**
+   * Обрабатывает выбор уровня сложности пользователем.
+   * @param {string} id Идентификатор сложности.
+   * @returns {void}
+   */
+  const handleSelectDifficulty = useCallback((id: string): void => {
+    setSelectedDifficultyId(id);
+  }, []);
+
+  /**
    * Запускает игру и скрывает стартовый экран.
    * @returns {void}
    */
@@ -44,6 +84,7 @@ export default function HomeScreen(): JSX.Element {
           <ViewPort
             isSoundEnabled={isSoundEnabled}
             isVibrationEnabled={isVibrationEnabled}
+            difficulty={selectedDifficulty}
           />
         </View>
       ) : (
@@ -72,6 +113,39 @@ export default function HomeScreen(): JSX.Element {
                 Звук: {isSoundEnabled ? "Вкл" : "Выкл"}
               </Text>
             </Pressable>
+          </View>
+          <View style={styles.difficultyContainer}>
+            <Text style={styles.sectionLabel}>Сложность</Text>
+            <View style={styles.difficultyOptions}>
+              {DIFFICULTIES.map((difficultyOption) => {
+                const isActive =
+                  difficultyOption.id === selectedDifficultyId;
+                return (
+                  <Pressable
+                    key={difficultyOption.id}
+                    onPress={() => handleSelectDifficulty(difficultyOption.id)}
+                    style={[
+                      styles.difficultyButton,
+                      isActive ? styles.difficultyButtonActive : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.difficultyButtonText,
+                        isActive ? styles.difficultyButtonTextActive : null,
+                      ]}
+                    >
+                      {difficultyOption.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.difficultyDescription}>
+              Боксов: {selectedDifficulty.boxCountRange[0]}–
+              {selectedDifficulty.boxCountRange[1]}, IoU ≥
+              {selectedDifficulty.matchThreshold.toFixed(2)}
+            </Text>
           </View>
           <Pressable onPress={handleStartGame} style={styles.startButton}>
             <Text style={styles.startButtonText}>Старт</Text>
@@ -108,6 +182,11 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 16,
   },
+  sectionLabel: {
+    color: "#cbd5f5",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   toggleButton: {
     borderWidth: 2,
     borderColor: "#000000",
@@ -124,6 +203,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
+  },
+  difficultyContainer: {
+    width: "100%",
+    gap: 12,
+  },
+  difficultyOptions: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  difficultyButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 6,
+    backgroundColor: "#0f172a",
+  },
+  difficultyButtonActive: {
+    borderColor: "#f8fafc",
+    backgroundColor: "#1e293b",
+  },
+  difficultyButtonText: {
+    color: "#cbd5f5",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  difficultyButtonTextActive: {
+    color: "#f8fafc",
+    fontWeight: "700",
+  },
+  difficultyDescription: {
+    color: "#94a3b8",
+    fontSize: 14,
   },
   startButton: {
     marginTop: 12,

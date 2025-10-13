@@ -11,6 +11,12 @@ import {
   Box3,
   Matrix4,
   FogExp2,
+  MeshBasicMaterial,
+  DoubleSide,
+  WebGLRenderTarget,
+  LinearFilter,
+  RGBAFormat,
+  UnsignedByteType,
 } from "three";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
@@ -52,6 +58,13 @@ export class Viewport {
   private readonly zoomEpsilon = 1e-4;
   private readonly fogColor = new Color(0x05060a);
   private readonly fogTargetTransmittance = 0.25;
+  private readonly silhouetteMaterial = new MeshBasicMaterial({
+    color: 0xffffff,
+    side: DoubleSide,
+  });
+  private silhouetteRenderTarget: WebGLRenderTarget | null = null;
+  private readonly captureClearColor = new Color();
+  private captureClearAlpha = 1;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -338,6 +351,8 @@ export class Viewport {
       this.scene.remove(this.directionalLight.target);
       this.directionalLight = null;
     }
+    this.disposeSilhouetteRenderTarget();
+    this.silhouetteMaterial.dispose();
   }
 
   /**
@@ -391,6 +406,30 @@ export class Viewport {
     this.pendingRotationDelta += deltaAngle;
     const dt = this.lastDeltaTime || 1 / 60;
     this.rotationVelocity = deltaAngle / dt;
+  }
+
+  /**
+   * Устанавливает абсолютный горизонтальный угол камеры и обнуляет накопленные значения инерции.
+   * @param {number} angle Значение угла в радианах.
+   * @returns {void}
+   */
+  setHorizontalAngle(angle: number): void {
+    if (!Number.isFinite(angle)) {
+      return;
+    }
+
+    this.horizontalAngle = angle;
+    this.pendingRotationDelta = 0;
+    this.rotationVelocity = 0;
+    this.updateCameraPositionFromOrbit();
+  }
+
+  /**
+   * Возвращает текущий горизонтальный угол камеры относительно оси Z.
+   * @returns {number} Горизонтальный угол в радианах.
+   */
+  getHorizontalAngle(): number {
+    return this.horizontalAngle;
   }
 
   /**
@@ -697,5 +736,120 @@ export class Viewport {
     const density = -Math.log(this.fogTargetTransmittance) / safeDepth;
     fog.density = density;
     fog.color.copy(this.fogColor);
+  }
+
+  /**
+   * Гарантирует наличие рендер-таргета указанного размера для получения силуэта.
+   * @param {number} width Ширина таргета в пикселях.
+   * @param {number} height Высота таргета в пикселях.
+   * @returns {WebGLRenderTarget} Подготовленный рендер-таргет.
+   */
+  private ensureSilhouetteRenderTarget(
+    width: number,
+    height: number
+  ): WebGLRenderTarget {
+    if (
+      this.silhouetteRenderTarget &&
+      this.silhouetteRenderTarget.width === width &&
+      this.silhouetteRenderTarget.height === height
+    ) {
+      return this.silhouetteRenderTarget;
+    }
+
+    this.disposeSilhouetteRenderTarget();
+
+    const target = new WebGLRenderTarget(width, height, {
+      minFilter: LinearFilter,
+      magFilter: LinearFilter,
+      format: RGBAFormat,
+      type: UnsignedByteType,
+      depthBuffer: false,
+      stencilBuffer: false,
+    });
+    target.texture.generateMipmaps = false;
+    target.texture.flipY = false;
+    this.silhouetteRenderTarget = target;
+    return target;
+  }
+
+  /**
+   * Освобождает ресурсы вспомогательного рендер-таргета силуэта.
+   * @returns {void}
+   */
+  private disposeSilhouetteRenderTarget(): void {
+    if (this.silhouetteRenderTarget) {
+      this.silhouetteRenderTarget.dispose();
+      this.silhouetteRenderTarget = null;
+    }
+  }
+
+  /**
+   * Рендерит сцену в offscreen-буфер и возвращает пиксельную маску силуэта.
+   * @param {number} width Ширина результирующей маски.
+   * @param {number} height Высота результирующей маски.
+   * @param {Uint8Array} [targetBuffer] Буфер, который можно переиспользовать для записи пикселей.
+   * @returns {Uint8Array | null} Маска в формате RGBA либо null, если захват невозможен.
+   */
+  captureSilhouetteMask(
+    width: number,
+    height: number,
+    targetBuffer?: Uint8Array
+  ): Uint8Array | null {
+    if (!this.renderer || !this.scene || !this.camera) {
+      return null;
+    }
+
+    if (
+      width <= 0 ||
+      height <= 0 ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height)
+    ) {
+      return null;
+    }
+
+    const renderTarget = this.ensureSilhouetteRenderTarget(width, height);
+
+    const previousRenderTarget = this.renderer.getRenderTarget();
+    const previousAutoClear = this.renderer.autoClear;
+    this.renderer.getClearColor(this.captureClearColor);
+    this.captureClearAlpha = this.renderer.getClearAlpha();
+    const previousOverride = this.scene.overrideMaterial ?? null;
+    const previousBackground = this.scene.background ?? null;
+    const previousFog = this.scene.fog ?? null;
+
+    this.scene.overrideMaterial = this.silhouetteMaterial;
+    this.scene.background = null;
+    this.scene.fog = null;
+
+    this.renderer.autoClear = true;
+    this.renderer.setRenderTarget(renderTarget);
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.clear(true, true, true);
+    this.renderer.render(this.scene, this.camera);
+
+    const bufferSize = width * height * 4;
+    const pixels =
+      targetBuffer && targetBuffer.length === bufferSize
+        ? targetBuffer
+        : new Uint8Array(bufferSize);
+
+    this.renderer.readRenderTargetPixels(
+      renderTarget,
+      0,
+      0,
+      width,
+      height,
+      pixels
+    );
+
+    this.renderer.setRenderTarget(previousRenderTarget);
+    this.renderer.setClearColor(this.captureClearColor, this.captureClearAlpha);
+    this.renderer.autoClear = previousAutoClear;
+    this.scene.overrideMaterial = previousOverride;
+    this.scene.background = previousBackground;
+    this.scene.fog = previousFog;
+
+    return pixels;
   }
 }
