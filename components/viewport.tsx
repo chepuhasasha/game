@@ -1,8 +1,9 @@
-import { JSX, useCallback, useMemo, useRef } from "react";
+import { JSX, useCallback, useEffect, useMemo, useRef } from "react";
 import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
+import { Audio } from "expo-av";
 import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
@@ -10,7 +11,42 @@ const ROTATION_STEP_ANGLE = Math.PI / 18;
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const lastDx = useRef(0);
-  let lastStepTime = Date.now()
+  const lastStepTimeRef = useRef(Date.now());
+  const rotationStepSoundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    /**
+     * Загружает звуковой эффект шага вращения.
+     * @returns {Promise<void>}
+     */
+    const loadRotationStepSound = async (): Promise<void> => {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require("../assets/sounds/step.mp3")
+        );
+
+        if (isMounted) {
+          rotationStepSoundRef.current = sound;
+        } else {
+          void sound.unloadAsync();
+        }
+      } catch (error) {
+        console.warn("Не удалось загрузить звук шага вращения.", error);
+      }
+    };
+
+    void loadRotationStepSound();
+
+    return () => {
+      isMounted = false;
+      if (rotationStepSoundRef.current !== null) {
+        void rotationStepSoundRef.current.unloadAsync();
+        rotationStepSoundRef.current = null;
+      }
+    };
+  }, []);
 
   /**
    * Вызывает лёгкую вибрацию при прохождении шага вращения.
@@ -18,10 +54,14 @@ export const ViewPort = (): JSX.Element => {
    * @returns {void}
    */
   const handleRotationStep = useCallback((_: 1 | -1): void => {
-    const time = Date.now()
-    if(time - lastStepTime >= 100) {
-      lastStepTime = time
+    const time = Date.now();
+    if (time - lastStepTimeRef.current >= 100) {
+      lastStepTimeRef.current = time;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const sound = rotationStepSoundRef.current;
+      if (sound !== null) {
+        void sound.replayAsync();
+      }
     }
   }, []);
 
