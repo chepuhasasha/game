@@ -28,6 +28,11 @@ const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
 const RING_INNER_MARGIN = 0.6;
 const RING_WIDTH = 0.8;
 const RING_RADIAL_SEGMENTS = 96;
+const RING_TICK_COUNT = 96;
+const RING_TICK_HEIGHT = 0.18;
+const RING_TICK_WIDTH = 0.05;
+const RING_TICK_DEPTH = 0.25;
+const RING_ROTATION_SPEED = Math.PI / 10;
 
 type ViewPortProps = {
   isSoundEnabled: boolean;
@@ -281,6 +286,12 @@ export const ViewPort = ({
         radialSegments: RING_RADIAL_SEGMENTS,
         positionY: RING_FLOOR_OFFSET,
         color: "#6e7dff",
+        tickColor: "#eaf1ff",
+        tickCount: RING_TICK_COUNT,
+        tickHeight: RING_TICK_HEIGHT,
+        tickWidth: RING_TICK_WIDTH,
+        tickDepth: RING_TICK_DEPTH,
+        rotationSpeed: RING_ROTATION_SPEED,
         metalness: 0.5,
         roughness: 0.5,
       });
