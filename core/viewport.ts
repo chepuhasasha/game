@@ -30,6 +30,7 @@ export class Viewport {
   private environmentTarget: WebGLRenderTarget | null = null;
   private contentRoot: Object3D | null = null;
   private fitExclusions = new Set<Object3D>();
+  private directionalLight: DirectionalLight | null = null;
   private readonly screenRayOrigin = new Vector3();
   private readonly screenRayTarget = new Vector3();
   private readonly screenRayDirection = new Vector3();
@@ -72,6 +73,7 @@ export class Viewport {
     this.camera = this.makeCamera(w, h);
     this.camera.position.set(5, 4, 5);
     this.camera.lookAt(this.target);
+    this.scene.add(this.camera);
     this.contentRoot = new Object3D();
     this.scene.add(this.contentRoot);
     const offset = new Vector3().copy(this.camera.position).sub(this.target);
@@ -86,8 +88,12 @@ export class Viewport {
 
     this.scene.add(new AmbientLight(0xffffff, 1.1));
     const dir = new DirectionalLight(0xffffff, 1.4);
-    dir.position.set(5, 8, 3);
+    this.directionalLight = dir;
+    dir.position.copy(this.camera.position);
+    dir.target.position.copy(this.target);
     this.scene.add(dir);
+    this.scene.add(dir.target);
+    this.updateDirectionalLight();
 
     this.setupEnvironment();
 
@@ -335,6 +341,11 @@ export class Viewport {
     this.pmremGenerator?.dispose();
     this.pmremGenerator = null;
     this.renderer?.dispose();
+    if (this.directionalLight) {
+      this.scene.remove(this.directionalLight);
+      this.scene.remove(this.directionalLight.target);
+      this.directionalLight = null;
+    }
   }
 
   /**
@@ -526,6 +537,7 @@ export class Viewport {
     const y = this.target.y + this.cameraHeightOffset;
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.target);
+    this.updateDirectionalLight();
   }
 
   /**
@@ -673,5 +685,19 @@ export class Viewport {
         this.camera.updateProjectionMatrix();
       }
     }
+  }
+
+  /**
+   * Синхронизирует позицию и направление направленного света с камерой и целевой точкой.
+   * @returns {void}
+   */
+  private updateDirectionalLight(): void {
+    if (!this.directionalLight || !this.camera) {
+      return;
+    }
+
+    this.directionalLight.position.copy(this.camera.position);
+    this.directionalLight.target.position.copy(this.target);
+    this.directionalLight.target.updateMatrixWorld();
   }
 }
