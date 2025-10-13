@@ -9,13 +9,13 @@ const EDGE_RADIUS = 0.2;   // подбери визуально; при 1×1×1 
 const EDGE_SEGMENTS = 4;    // сглаженность (целое ≥1)
 
 export class BoxObject extends Mesh implements Updatable {
-  constructor(box: GameBox) {
+  constructor(box: GameBox, gap: number = 0.05) {
     super(
       // Порядок как в твоём рабочем коде: (w,h,d, smoothness, radius)
       new RoundedBoxGeometry(
-        box.width,
-        box.height,
-        box.depth,
+        box.width - gap,
+        box.height - gap,
+        box.depth - gap,
         BoxObject.resolveCornerSmoothness(),
         BoxObject.resolveCornerRadius(box)
       ),
