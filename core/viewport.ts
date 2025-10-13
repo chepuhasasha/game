@@ -7,6 +7,7 @@ import {
   AmbientLight,
   DirectionalLight,
   Object3D,
+  Vector2,
   Vector3,
   PMREMGenerator,
   WebGLRenderTarget,
@@ -492,5 +493,48 @@ export class Viewport {
         this.camera.updateProjectionMatrix();
       }
     }
+  }
+
+  /**
+   * Проецирует мировую позицию в координаты текущего экрана GLView.
+   * @param {{x:number,y:number,z:number}} worldPosition Мировая позиция, которую требуется спроецировать.
+   * @returns {{x:number,y:number}|null} Экранные координаты либо null при отсутствии камеры или рендера.
+   */
+  projectWorldToScreen(worldPosition: {
+    x: number;
+    y: number;
+    z: number;
+  }): { x: number; y: number } | null {
+    if (!this.camera || !this.renderer) {
+      return null;
+    }
+
+    const vector = new Vector3(
+      worldPosition.x,
+      worldPosition.y,
+      worldPosition.z
+    );
+
+    this.camera.updateMatrixWorld(true);
+    vector.project(this.camera);
+
+    const size = this.renderer.getSize(new Vector2());
+    if (
+      !Number.isFinite(size.x) ||
+      !Number.isFinite(size.y) ||
+      size.x <= 0 ||
+      size.y <= 0
+    ) {
+      return null;
+    }
+
+    const x = ((vector.x + 1) / 2) * size.x;
+    const y = ((-vector.y + 1) / 2) * size.y;
+
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+
+    return { x, y };
   }
 }
