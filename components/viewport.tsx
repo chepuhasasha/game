@@ -3,12 +3,26 @@ import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
+ 
 import { Audio, AVPlaybackStatus } from "expo-av";
 import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
 
-export const ViewPort = (): JSX.Element => {
+type ViewPortProps = {
+  isSoundEnabled: boolean;
+  isVibrationEnabled: boolean;
+};
+
+/**
+ * Отображает трёхмерный вьюпорт с объектами и реагирует на пользовательские жесты.
+ * @param {ViewPortProps} props Свойства компонента, управляемые состоянием звука и вибрации.
+ * @returns {JSX.Element} Возвращает разметку компонента вьюпорта.
+ */
+export const ViewPort = ({
+  isSoundEnabled,
+  isVibrationEnabled,
+}: ViewPortProps): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const lastDx = useRef(0);
   const lastStepTimeRef = useRef(Date.now());
@@ -76,6 +90,10 @@ export const ViewPort = (): JSX.Element => {
    * @returns {void}
    */
   const playRotationStepSound = useCallback((): void => {
+    if (!isSoundEnabled) {
+      return;
+    }
+
     const sound = rotationStepSoundRef.current;
     if (sound === null || !isRotationStepSoundLoadedRef.current) {
       return;
@@ -91,7 +109,29 @@ export const ViewPort = (): JSX.Element => {
     }
 
     void sound.playFromPositionAsync(0);
+  }, [isSoundEnabled]);
+
+  /**
+   * Останавливает звук шага вращения, если он воспроизводится.
+   * @returns {void}
+   */
+  const stopRotationStepSound = useCallback((): void => {
+    const sound = rotationStepSoundRef.current;
+    if (sound === null || !isRotationStepSoundLoadedRef.current) {
+      return;
+    }
+
+    void sound.stopAsync();
   }, []);
+
+  /**
+   * Следит за состоянием звука и при отключении мгновенно останавливает воспроизведение шага.
+   */
+  useEffect(() => {
+    if (!isSoundEnabled) {
+      stopRotationStepSound();
+    }
+  }, [isSoundEnabled, stopRotationStepSound]);
 
   /**
    * Вызывает лёгкую вибрацию при прохождении шага вращения.
@@ -103,11 +143,13 @@ export const ViewPort = (): JSX.Element => {
       const time = Date.now();
       if (time - lastStepTimeRef.current >= 100) {
         lastStepTimeRef.current = time;
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (isVibrationEnabled) {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
         playRotationStepSound();
       }
     },
-    [playRotationStepSound]
+    [isVibrationEnabled, playRotationStepSound]
   );
 
   /**
