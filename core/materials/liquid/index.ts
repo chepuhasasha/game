@@ -102,8 +102,6 @@ export const createLiquidMaterial = (): LiquidMaterial => {
           uniform float uFlowSpeedA;
           uniform float uFlowSpeedB;
 
-          float saturate(float value) { return clamp(value, 0.0, 1.0); }
-
           float hash(vec3 p) {
             return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
           }
@@ -163,8 +161,8 @@ export const createLiquidMaterial = (): LiquidMaterial => {
           float noiseA = fbm(flowSampleA * uNoiseScale);
           float noiseB = fbm(flowSampleB * uNoiseScale);
           float liquidFlowSignal = noiseA - noiseB;
-          float liquidDepthMix = saturate(0.5 + 0.5 * liquidFlowSignal);
-          float liquidFoamMix = saturate(pow(abs(liquidFlowSignal), 3.0));
+          float liquidDepthMix = clamp(0.5 + 0.5 * liquidFlowSignal, 0.0, 1.0);
+          float liquidFoamMix = clamp(pow(abs(liquidFlowSignal), 3.0), 0.0, 1.0);
 
           vec3 flowNormalOffset = vec3(
             dFdx(liquidFlowSignal),
@@ -179,7 +177,7 @@ export const createLiquidMaterial = (): LiquidMaterial => {
         `#include <lights_fragment_begin>
           vec3 worldNormal = normalize(vWorldNormal);
           vec3 viewDir = normalize(vViewDir);
-          float fresnelTerm = pow(1.0 - saturate(dot(worldNormal, viewDir)), uFresnelPower);
+          float fresnelTerm = pow(1.0 - clamp(dot(worldNormal, viewDir), 0.0, 1.0), uFresnelPower);
           vec3 depthTint = mix(
             uDepthColor,
             uSurfaceColor,
