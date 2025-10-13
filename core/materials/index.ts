@@ -1,10 +1,12 @@
 import { WebGLRenderer, ACESFilmicToneMapping, SRGBColorSpace } from "three";
 import { createGlassMaterial } from "./glass";
+import { createLiquidMaterial } from "./liquid";
 import { StandartMaterial } from "./standart";
 
 export const materials = {
   standart: StandartMaterial,
   glass: createGlassMaterial(),
+  liquid: createLiquidMaterial(),
 };
 
 export type MaterialName = keyof typeof materials;
@@ -83,3 +85,4 @@ export const configureRendererPhysicMaterials = (
 
 export * from "./standart";
 export * from "./glass";
+export * from "./liquid";
