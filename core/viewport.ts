@@ -35,12 +35,8 @@ export class Viewport {
   private rotationStepSize = Math.PI / 24;
   private rotationStepAccumulator = 0;
   private rotationStepCallback: ((direction: 1 | -1) => void) | null = null;
-  private rotationVelocity = 0;
   private pendingRotationDelta = 0;
-  private rotationFriction = 1;
-  private rotationVelocityThreshold = 1e-4;
   private rotationSensitivity = 0.005;
-  private lastDeltaTime = 1 / 60;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -165,9 +161,6 @@ export class Viewport {
   private loop = (t = 0): void => {
     const dt = this.last ? (t - this.last) / 1000 : 0;
     this.last = t;
-    if (dt > 0) {
-      this.lastDeltaTime = dt;
-    }
     this.updateCameraRotation(dt);
     this.updatables.forEach((u) => u.update(dt));
     this.renderer.render(this.scene, this.camera);
@@ -211,7 +204,7 @@ export class Viewport {
   }
 
   /**
-   * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости.
+   * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости без инерции.
    * @param {number} deltaX Изменение жеста по оси X в пикселях.
    * @returns {void}
    */
@@ -221,45 +214,6 @@ export class Viewport {
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
     this.pendingRotationDelta += deltaAngle;
-    const dt = this.lastDeltaTime || 1 / 60;
-    this.rotationVelocity = deltaAngle / dt;
-  }
-
-  /**
-   * Настраивает параметры инерции горизонтального вращения камеры.
-   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options
-   *   Объект с параметрами инерции.
-   * @param {number} [options.friction]
-   *   Коэффициент экспоненциального демпфирования угловой скорости: чем больше значение, тем
-   *   быстрее скорость затухает после завершения жеста. Ноль отключает торможение.
-   * @param {number} [options.velocityThreshold]
-   *   Минимальная по модулю угловая скорость, при падении ниже которой инерция считается
-   *   завершённой и дальнейшее вращение прекращается.
-   * @param {number} [options.sensitivity]
-   *   Множитель преобразования горизонтального жеста в радианы: влияет на скорость поворота
-   *   камеры при перетаскивании, а также на исходную скорость инерции.
-   * @returns {void}
-   */
-  setRotationInertia({
-    friction,
-    velocityThreshold,
-    sensitivity,
-  }: {
-    friction?: number;
-    velocityThreshold?: number;
-    sensitivity?: number;
-  }): void {
-    if (typeof friction === "number" && Number.isFinite(friction)) {
-      this.rotationFriction = Math.max(0, friction);
-    }
-
-    if (typeof velocityThreshold === "number" && Number.isFinite(velocityThreshold)) {
-      this.rotationVelocityThreshold = Math.max(0, velocityThreshold);
-    }
-
-    if (typeof sensitivity === "number" && Number.isFinite(sensitivity)) {
-      this.rotationSensitivity = Math.max(0, sensitivity);
-    }
   }
 
   /**
@@ -286,33 +240,17 @@ export class Viewport {
   }
 
   /**
-   * Обновляет вращение камеры с учётом инерции и накопленных изменений.
-   * @param {number} dt Дельта времени между кадрами в секундах.
+   * Обновляет вращение камеры, применяя накопленные изменения угла.
+   * @param {number} _dt Дельта времени между кадрами в секундах (не используется).
    * @returns {void}
    */
-  private updateCameraRotation(dt: number): void {
+  private updateCameraRotation(_dt: number): void {
     if (!this.camera) return;
 
     if (this.pendingRotationDelta !== 0) {
       this.applyHorizontalAngleDelta(this.pendingRotationDelta);
       this.pendingRotationDelta = 0;
     }
-
-    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
-      this.rotationVelocity = 0;
-      return;
-    }
-
-    const damping = dt > 0 ? Math.exp(-this.rotationFriction * dt) : 1;
-    this.rotationVelocity *= damping;
-
-    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
-      this.rotationVelocity = 0;
-      return;
-    }
-
-    const deltaAngle = this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
-    this.applyHorizontalAngleDelta(deltaAngle);
   }
 
   /**
