@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import {
+  Animated,
   GestureResponderEvent,
   LayoutChangeEvent,
   PanResponder,
   PanResponderGestureState,
   PanResponderInstance,
-  StyleProp,
   StyleSheet,
   View,
-  ViewStyle,
+  Easing,
 } from "react-native";
 
 const HANDLE_SIZE = 48;
@@ -27,11 +27,6 @@ const INITIAL_HANDLE_OFFSET = {
 type LayoutSize = {
   width: number;
   height: number;
-};
-
-type HandleOffset = {
-  x: number;
-  y: number;
 };
 
 type RectJoystickProps = {
@@ -58,20 +53,84 @@ export const RectJoystick = ({
   onHorizontalDrag,
 }: RectJoystickProps): JSX.Element => {
   const [layout, setLayout] = useState<LayoutSize>(INITIAL_LAYOUT);
-  const [handleOffset, setHandleOffset] = useState<HandleOffset>(
-    INITIAL_HANDLE_OFFSET
-  );
   const [isPressed, setIsPressed] = useState(false);
   const lastDxRef = useRef(0);
+  const handlePosition = useRef(
+    new Animated.ValueXY(INITIAL_HANDLE_OFFSET)
+  ).current;
+  const scaleValue = useRef(new Animated.Value(1)).current;
+  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  /**
+   * Останавливает текущую пульсацию бегунка.
+   * @returns {void}
+   */
+  const stopPulseAnimation = useCallback((): void => {
+    if (pulseAnimationRef.current) {
+      pulseAnimationRef.current.stop();
+      pulseAnimationRef.current = null;
+    }
+  }, []);
 
   /**
    * Сбрасывает позицию бегунка в центр и обнуляет накопленное смещение.
    * @returns {void}
    */
   const resetHandlePosition = useCallback((): void => {
-    setHandleOffset(INITIAL_HANDLE_OFFSET);
+    handlePosition.stopAnimation();
+    handlePosition.setValue(INITIAL_HANDLE_OFFSET);
     lastDxRef.current = 0;
-  }, []);
+  }, [handlePosition]);
+
+  /**
+   * Запускает анимацию плавного возврата бегунка в центр.
+   * @returns {void}
+   */
+  const animateHandleToCenter = useCallback((): void => {
+    handlePosition.stopAnimation();
+    Animated.spring(handlePosition, {
+      toValue: INITIAL_HANDLE_OFFSET,
+      damping: 12,
+      stiffness: 180,
+      mass: 0.5,
+      useNativeDriver: true,
+    }).start();
+    lastDxRef.current = 0;
+  }, [handlePosition]);
+
+  /**
+   * Запускает пульсацию бегунка в режиме покоя.
+   * @returns {void}
+   */
+  const startPulseAnimation = useCallback((): void => {
+    stopPulseAnimation();
+    scaleValue.setValue(1);
+    pulseAnimationRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleValue, {
+          toValue: 1.08,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleValue, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimationRef.current.start();
+  }, [scaleValue, stopPulseAnimation]);
+
+  useEffect(() => {
+    startPulseAnimation();
+
+    return () => {
+      stopPulseAnimation();
+    };
+  }, [startPulseAnimation, stopPulseAnimation]);
 
   /**
    * Сохраняет размеры контейнера джойстика при изменении раскладки.
@@ -108,7 +167,8 @@ export const RectJoystick = ({
       const clampedDx = clamp(gestureState.dx, -halfWidth, halfWidth);
       const clampedDy = clamp(gestureState.dy, -halfHeight, halfHeight);
 
-      setHandleOffset({
+      handlePosition.stopAnimation();
+      handlePosition.setValue({
         x: clampedDx,
         y: clampedDy,
       });
@@ -117,7 +177,7 @@ export const RectJoystick = ({
       lastDxRef.current = gestureState.dx;
       onHorizontalDrag(deltaX);
     },
-    [layout.height, layout.width, onHorizontalDrag]
+    [handlePosition, layout.height, layout.width, onHorizontalDrag]
   );
 
   /**
@@ -126,8 +186,17 @@ export const RectJoystick = ({
    */
   const handlePanEnd = useCallback((): void => {
     setIsPressed(false);
-    resetHandlePosition();
-  }, [resetHandlePosition]);
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 180,
+      mass: 0.6,
+      useNativeDriver: true,
+    }).start(() => {
+      startPulseAnimation();
+    });
+    animateHandleToCenter();
+  }, [animateHandleToCenter, scaleValue, startPulseAnimation]);
 
   /**
    * Подготавливает состояние к началу обработки свайпа и включает визуальный эффект нажатия.
@@ -135,14 +204,23 @@ export const RectJoystick = ({
    */
   const handlePanStart = useCallback((): void => {
     setIsPressed(true);
+    stopPulseAnimation();
+    scaleValue.stopAnimation();
+    Animated.spring(scaleValue, {
+      toValue: 1.2,
+      damping: 12,
+      stiffness: 220,
+      mass: 0.4,
+      useNativeDriver: true,
+    }).start();
     resetHandlePosition();
-  }, [resetHandlePosition]);
+  }, [resetHandlePosition, scaleValue, stopPulseAnimation]);
 
   /**
    * Формирует визуальный стиль бегунка с учётом нажатия и текущего смещения.
-   * @returns {StyleProp<ViewStyle>} Объединённый стиль для отображения бегунка.
+   * @returns {Array<object>} Массив стилевых объектов для отображения бегунка.
    */
-  const handleStyle = useMemo<StyleProp<ViewStyle>>(() => {
+  const handleStyle = useMemo(() => {
     return [
       styles.handle,
       {
@@ -150,13 +228,12 @@ export const RectJoystick = ({
           ? "rgba(255,255,255, 1)"
           : "rgba(255,255,255, 0.4)",
         transform: [
-          { translateX: handleOffset.x },
-          { translateY: handleOffset.y },
-          { scale: isPressed ? 1.2 : 1 },
+          ...handlePosition.getTranslateTransform(),
+          { scale: scaleValue },
         ],
       },
     ];
-  }, [handleOffset.x, handleOffset.y, isPressed]);
+  }, [handlePosition, isPressed, scaleValue]);
 
   /**
    * Определяет, следует ли назначать обработчик жестов на событие начала касания.
@@ -208,7 +285,7 @@ export const RectJoystick = ({
       style={styles.container}
       {...panResponder.panHandlers}
     >
-      <View
+      <Animated.View
         pointerEvents="none"
         style={handleStyle}
       />
