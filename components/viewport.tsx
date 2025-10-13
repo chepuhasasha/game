@@ -183,11 +183,11 @@ const useRotationFeedback = ({
     (_direction: 1 | -1): void => {
       const time = Date.now();
       if (time - lastStepTimeRef.current >= 100) {
+        play();
         lastStepTimeRef.current = time;
         if (isVibrationEnabled) {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
-        play();
       }
     },
     [isVibrationEnabled, play]
