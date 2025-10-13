@@ -11,12 +11,23 @@ import * as Haptics from "expo-haptics";
  
 // eslint-disable-next-line import/no-unresolved
 import { Audio, AVPlaybackStatus } from "expo-av";
-import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
+import {
+  BoxObject,
+  generateBoxes,
+  createRng,
+  Viewport,
+  RotationRingObject,
+} from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
 const ROTATION_RING_OUTER_RADIUS_RATIO = 0.45;
 const ROTATION_RING_THICKNESS_RATIO = 0.2;
 const ROTATION_RING_MIN_THICKNESS = 24;
+const CONTAINER_SIZE = 6;
+const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
+const RING_INNER_MARGIN = 0.6;
+const RING_WIDTH = 0.8;
+const RING_RADIAL_SEGMENTS = 96;
 
 type ViewPortProps = {
   isSoundEnabled: boolean;
@@ -250,7 +261,7 @@ export const ViewPort = ({
         handleRotationStep
       );
       const rnd = createRng(123456);
-      const boxes = generateBoxes(6, 6, rnd);
+      const boxes = generateBoxes(CONTAINER_SIZE, 6, rnd);
       boxes.forEach((b) => {
         const box = new BoxObject({
           id: 1,
@@ -261,6 +272,19 @@ export const ViewPort = ({
         });
         viewport.current?.add(box);
       });
+      const halfDiagonal = Math.sqrt(2) * (CONTAINER_SIZE / 2);
+      const ringInnerRadius = halfDiagonal + RING_INNER_MARGIN;
+      const ringOuterRadius = ringInnerRadius + RING_WIDTH;
+      const rotationRing = new RotationRingObject({
+        innerRadius: ringInnerRadius,
+        outerRadius: ringOuterRadius,
+        radialSegments: RING_RADIAL_SEGMENTS,
+        positionY: RING_FLOOR_OFFSET,
+        color: "#6e7dff",
+        metalness: 0.5,
+        roughness: 0.5,
+      });
+      viewport.current?.add(rotationRing);
       viewport.current?.fitToContent();
     },
     [handleRotationStep]
@@ -356,7 +380,7 @@ const styles = StyleSheet.create({
   },
   rotationRing: {
     position: "absolute",
-    borderColor: "rgba(255, 255, 255, 0.35)",
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    borderColor: "transparent",
+    backgroundColor: "transparent",
   },
 });
