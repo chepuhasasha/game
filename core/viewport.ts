@@ -8,12 +8,9 @@ import {
   DirectionalLight,
   Object3D,
   Vector3,
-  PMREMGenerator,
-  WebGLRenderTarget,
   Box3,
   Matrix4,
 } from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
 import { configureRendererPhysicMaterials } from "./materials";
@@ -26,10 +23,9 @@ export class Viewport {
   private last = 0;
   private viewSize = 6;
   private updatables = new Set<Updatable>();
-  private pmremGenerator: PMREMGenerator | null = null;
-  private environmentTarget: WebGLRenderTarget | null = null;
   private contentRoot: Object3D | null = null;
   private fitExclusions = new Set<Object3D>();
+  private directionalLight: DirectionalLight | null = null;
   private readonly screenRayOrigin = new Vector3();
   private readonly screenRayTarget = new Vector3();
   private readonly screenRayDirection = new Vector3();
@@ -67,11 +63,12 @@ export class Viewport {
   init(): void {
     const { w, h } = this.size();
     this.scene = new Scene();
-    this.scene.background = new Color("#181818");
+    this.scene.background = new Color("#000000");
 
     this.camera = this.makeCamera(w, h);
     this.camera.position.set(5, 4, 5);
     this.camera.lookAt(this.target);
+    this.scene.add(this.camera);
     this.contentRoot = new Object3D();
     this.scene.add(this.contentRoot);
     const offset = new Vector3().copy(this.camera.position).sub(this.target);
@@ -84,12 +81,14 @@ export class Viewport {
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
 
-    this.scene.add(new AmbientLight(0xffffff, 1.1));
-    const dir = new DirectionalLight(0xffffff, 1.4);
-    dir.position.set(5, 8, 3);
+    this.scene.add(new AmbientLight(0xffffff, 1));
+    const dir = new DirectionalLight(0xffffff, 5);
+    this.directionalLight = dir;
+    dir.position.copy(this.camera.position);
+    dir.target.position.copy(this.target);
     this.scene.add(dir);
-
-    this.setupEnvironment();
+    this.scene.add(dir.target);
+    this.updateDirectionalLight();
 
     this.render();
   }
@@ -329,12 +328,12 @@ export class Viewport {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     this.clear();
-    this.scene.environment = null;
-    this.environmentTarget?.dispose();
-    this.environmentTarget = null;
-    this.pmremGenerator?.dispose();
-    this.pmremGenerator = null;
     this.renderer?.dispose();
+    if (this.directionalLight) {
+      this.scene.remove(this.directionalLight);
+      this.scene.remove(this.directionalLight.target);
+      this.directionalLight = null;
+    }
   }
 
   /**
@@ -526,6 +525,7 @@ export class Viewport {
     const y = this.target.y + this.cameraHeightOffset;
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.target);
+    this.updateDirectionalLight();
   }
 
   /**
@@ -541,24 +541,6 @@ export class Viewport {
     this.rotationStepSize = Math.max(Math.abs(stepAngle), Number.EPSILON);
     this.rotationStepAccumulator = 0;
     this.rotationStepCallback = callback;
-  }
-
-  /**
-   * Создаёт HDR-окружение для отражающих материалов и стекла.
-   * @returns {void}
-   */
-  private setupEnvironment(): void {
-    this.environmentTarget?.dispose();
-    this.environmentTarget = null;
-    this.pmremGenerator?.dispose();
-    this.pmremGenerator = new PMREMGenerator(this.renderer);
-    this.pmremGenerator.compileCubemapShader();
-    const room = new RoomEnvironment();
-    const target = this.pmremGenerator.fromScene(room, 0.04);
-    room.dispose();
-    this.environmentTarget = target;
-    this.scene.environment = target.texture;
-    this.scene.environmentIntensity = 1.5;
   }
 
   /**
@@ -673,5 +655,19 @@ export class Viewport {
         this.camera.updateProjectionMatrix();
       }
     }
+  }
+
+  /**
+   * Синхронизирует позицию и направление направленного света с камерой и целевой точкой.
+   * @returns {void}
+   */
+  private updateDirectionalLight(): void {
+    if (!this.directionalLight || !this.camera) {
+      return;
+    }
+
+    this.directionalLight.position.copy(this.camera.position);
+    this.directionalLight.target.position.copy(this.target);
+    this.directionalLight.target.updateMatrixWorld();
   }
 }
