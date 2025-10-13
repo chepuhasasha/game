@@ -1,13 +1,32 @@
-import { JSX, useCallback, useEffect, useMemo, useRef } from "react";
-import { PanResponder, StyleSheet } from "react-native";
+import { JSX, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  LayoutChangeEvent,
+  PanResponder,
+  StyleSheet,
+  View,
+} from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
- 
+
+// eslint-disable-next-line import/no-unresolved
 import { Audio, AVPlaybackStatus } from "expo-av";
-import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
+import {
+  BoxObject,
+  generateBoxes,
+  createRng,
+  Viewport,
+  RotationRingObject,
+} from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
+const ROTATION_RING_OUTER_RADIUS_RATIO = 0.45;
+const ROTATION_RING_THICKNESS_RATIO = 0.2;
+const ROTATION_RING_MIN_THICKNESS = 24;
+const CONTAINER_SIZE = 6;
+const RING_FLOOR_OFFSET = -CONTAINER_SIZE / 2 + 0.01;
+const RING_INNER_MARGIN = 0.6;
+const RING_WIDTH = 0.8;
 
 type ViewPortProps = {
   isSoundEnabled: boolean;
@@ -29,6 +48,8 @@ export const ViewPort = ({
   const rotationStepSoundRef = useRef<Audio.Sound | null>(null);
   const isRotationStepSoundLoadedRef = useRef(false);
   const isRotationStepSoundPlayingRef = useRef(false);
+  const isRotationGestureActiveRef = useRef(false);
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     let isMounted = true;
@@ -162,6 +183,69 @@ export const ViewPort = ({
   }, []);
 
   /**
+   * Обновляет размеры контейнера и пересчитывает границы кольца вращения.
+   * @param {LayoutChangeEvent} event Событие изменения раскладки контейнера.
+   * @returns {void}
+   */
+  const handleLayout = useCallback((event: LayoutChangeEvent): void => {
+    const { width, height } = event.nativeEvent.layout;
+    setLayout((previous) => {
+      if (previous.width === width && previous.height === height) {
+        return previous;
+      }
+
+      return { width, height };
+    });
+  }, []);
+
+  const rotationRingMetrics = useMemo(() => {
+    const minSide = Math.min(layout.width, layout.height);
+    if (minSide === 0) {
+      return null;
+    }
+
+    const outerRadius = minSide * ROTATION_RING_OUTER_RADIUS_RATIO;
+    const thickness = Math.max(
+      outerRadius * ROTATION_RING_THICKNESS_RATIO,
+      ROTATION_RING_MIN_THICKNESS
+    );
+    const innerRadius = Math.max(outerRadius - thickness, 0);
+    const diameter = outerRadius * 2;
+
+    return {
+      outerRadius,
+      innerRadius,
+      diameter,
+      thickness: outerRadius - innerRadius,
+    } as const;
+  }, [layout.height, layout.width]);
+
+  /**
+   * Проверяет, находится ли точка внутри интерактивного кольца вращения.
+   * @param {number} x Координата X точки относительно кольца.
+   * @param {number} y Координата Y точки относительно кольца.
+   * @returns {boolean} Возвращает true, если точка попадает в кольцо.
+   */
+  const isPointInRotationRing = useCallback(
+    (x: number, y: number): boolean => {
+      if (!rotationRingMetrics) {
+        return false;
+      }
+
+      const center = rotationRingMetrics.diameter / 2;
+      const dx = x - center;
+      const dy = y - center;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      return (
+        distance >= rotationRingMetrics.innerRadius &&
+        distance <= rotationRingMetrics.outerRadius
+      );
+    },
+    [rotationRingMetrics]
+  );
+
+  /**
    * Обработчик создания контекста OpenGL, инициализирующий сцену Three.js.
    * @param {ExpoWebGLRenderingContext} gl Контекст OpenGL, предоставленный Expo.
    * @returns {void}
@@ -176,7 +260,7 @@ export const ViewPort = ({
         handleRotationStep
       );
       const rnd = createRng(123456);
-      const boxes = generateBoxes(6, 6, rnd);
+      const boxes = generateBoxes(CONTAINER_SIZE, 6, rnd);
       boxes.forEach((b) => {
         const box = new BoxObject({
           id: 1,
@@ -187,6 +271,15 @@ export const ViewPort = ({
         });
         viewport.current?.add(box);
       });
+      const halfDiagonal = Math.sqrt(2) * (CONTAINER_SIZE / 2);
+      const ringInnerRadius = halfDiagonal + RING_INNER_MARGIN;
+      const ringOuterRadius = ringInnerRadius + RING_WIDTH;
+      const rotationRing = new RotationRingObject({
+        innerRadius: ringInnerRadius,
+        outerRadius: ringOuterRadius,
+        positionY: RING_FLOOR_OFFSET,
+      });
+      viewport.current?.add(rotationRing);
       viewport.current?.fitToContent();
     },
     [handleRotationStep]
@@ -195,38 +288,94 @@ export const ViewPort = ({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: (event) => {
+          const { locationX, locationY } = event.nativeEvent;
+          const shouldHandle = isPointInRotationRing(locationX, locationY);
+          isRotationGestureActiveRef.current = shouldHandle;
+
+          if (shouldHandle) {
+            lastDx.current = 0;
+          }
+
+          return shouldHandle;
+        },
+        onMoveShouldSetPanResponder: (event) => {
+          if (isRotationGestureActiveRef.current) {
+            return true;
+          }
+
+          const { locationX, locationY } = event.nativeEvent;
+          const shouldHandle = isPointInRotationRing(locationX, locationY);
+          if (shouldHandle) {
+            isRotationGestureActiveRef.current = true;
+            lastDx.current = 0;
+          }
+
+          return shouldHandle;
+        },
         onPanResponderGrant: () => {
           lastDx.current = 0;
         },
         onPanResponderMove: (_, gestureState) => {
+          if (!isRotationGestureActiveRef.current) {
+            return;
+          }
+
           const deltaX = gestureState.dx - lastDx.current;
           lastDx.current = gestureState.dx;
           handleHorizontalDrag(deltaX);
         },
         onPanResponderRelease: () => {
+          isRotationGestureActiveRef.current = false;
           lastDx.current = 0;
         },
         onPanResponderTerminate: () => {
+          isRotationGestureActiveRef.current = false;
           lastDx.current = 0;
         },
       }),
-    [handleHorizontalDrag]
+    [handleHorizontalDrag, isPointInRotationRing]
   );
 
   return (
-    <GLView
-      style={styles.glView}
-      onContextCreate={handleContextCreate}
-      {...panResponder.panHandlers}
-    />
+    <View style={styles.container} onLayout={handleLayout}>
+      <GLView style={styles.glView} onContextCreate={handleContextCreate} />
+      {rotationRingMetrics ? (
+        <View pointerEvents="box-none" style={styles.overlay}>
+          <View
+            {...panResponder.panHandlers}
+            style={[
+              styles.rotationRing,
+              {
+                width: rotationRingMetrics.diameter,
+                height: rotationRingMetrics.diameter,
+                borderRadius: rotationRingMetrics.diameter / 2,
+                borderWidth: Math.max(rotationRingMetrics.thickness, 1),
+                left: (layout.width - rotationRingMetrics.diameter) / 2,
+                top: (layout.height - rotationRingMetrics.diameter) / 2,
+              },
+            ]}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   glView: {
     flex: 1,
     overflow: "hidden",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  rotationRing: {
+    position: "absolute",
+    borderColor: "transparent",
+    backgroundColor: "transparent",
   },
 });
