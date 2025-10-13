@@ -402,13 +402,9 @@ export class Viewport {
     this.camera.updateMatrixWorld(true);
     const matrix = new Matrix4().copy(this.camera.matrixWorldInverse);
 
-    const cameraPosition = this.camera.position.clone();
     const forward = new Vector3()
-      .subVectors(this.target, cameraPosition)
+      .subVectors(this.target, this.camera.position)
       .normalize();
-
-    let minDistance = Infinity;
-    let maxDistance = -Infinity;
 
     const corners = [
       new Vector3(box.min.x, box.min.y, box.min.z),
@@ -425,6 +421,8 @@ export class Viewport {
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
+    let minCameraZ = Infinity;
+    let maxCameraZ = -Infinity;
 
     corners.forEach((corner) => {
       const projected = corner.clone().applyMatrix4(matrix);
@@ -432,12 +430,8 @@ export class Viewport {
       maxX = Math.max(maxX, projected.x);
       minY = Math.min(minY, projected.y);
       maxY = Math.max(maxY, projected.y);
-      if (forward.lengthSq() > 0) {
-        const toCorner = corner.clone().sub(cameraPosition);
-        const distance = toCorner.dot(forward);
-        minDistance = Math.min(minDistance, distance);
-        maxDistance = Math.max(maxDistance, distance);
-      }
+      minCameraZ = Math.min(minCameraZ, projected.z);
+      maxCameraZ = Math.max(maxCameraZ, projected.z);
     });
 
     const width = maxX - minX;
@@ -458,22 +452,28 @@ export class Viewport {
       this.setZoom(nextZoom);
     }
 
-    if (forward.lengthSq() > 0) {
-      const depth = Math.max(maxDistance - minDistance, Number.EPSILON);
+    if (
+      forward.lengthSq() > 0 &&
+      Number.isFinite(minCameraZ) &&
+      Number.isFinite(maxCameraZ)
+    ) {
+      const frontDistance = -maxCameraZ;
+      const backDistance = -minCameraZ;
+      const depth = Math.max(backDistance - frontDistance, Number.EPSILON);
       const depthMargin = depth * Math.max(0, marginRatio);
 
-      let paddedMinDistance = minDistance - depthMargin;
-      let paddedMaxDistance = maxDistance + depthMargin;
+      let paddedFrontDistance = frontDistance - depthMargin;
+      let paddedBackDistance = backDistance + depthMargin;
 
-      const minNear = 0.1;
+      const minNear = 0.01;
 
-      if (paddedMinDistance <= minNear) {
-        const shift = minNear - paddedMinDistance;
+      if (paddedFrontDistance <= minNear) {
+        const shift = minNear - paddedFrontDistance;
         if (Number.isFinite(shift) && shift > 0) {
           this.camera.position.addScaledVector(forward, -shift);
           this.camera.lookAt(this.target);
-          paddedMinDistance += shift;
-          paddedMaxDistance += shift;
+          paddedFrontDistance += shift;
+          paddedBackDistance += shift;
 
           const updatedOffset = new Vector3()
             .copy(this.camera.position)
@@ -483,10 +483,8 @@ export class Viewport {
         }
       }
 
-      this.camera.updateMatrixWorld(true);
-
-      const desiredNear = Math.max(minNear, paddedMinDistance);
-      const desiredFar = Math.max(desiredNear + 1, paddedMaxDistance);
+      const desiredNear = Math.max(minNear, paddedFrontDistance);
+      const desiredFar = Math.max(desiredNear + 1, paddedBackDistance);
 
       if (Number.isFinite(desiredNear) && Number.isFinite(desiredFar)) {
         this.camera.near = desiredNear;
