@@ -10,6 +10,7 @@ import {
   Vector3,
   Box3,
   Matrix4,
+  FogExp2,
 } from "three";
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
@@ -49,6 +50,8 @@ export class Viewport {
   private targetZoom = 1;
   private zoomTransitionSpeed = 40;
   private readonly zoomEpsilon = 1e-4;
+  private readonly fogColor = new Color(0x05060a);
+  private readonly fogTargetTransmittance = 0.25;
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -63,7 +66,8 @@ export class Viewport {
   init(): void {
     const { w, h } = this.size();
     this.scene = new Scene();
-    this.scene.background = new Color("#000000");
+    this.scene.background = this.fogColor.clone();
+    this.scene.fog = new FogExp2(this.fogColor.clone(), Number.EPSILON);
 
     this.camera = this.makeCamera(w, h);
     this.camera.position.set(5, 4, 5);
@@ -654,6 +658,8 @@ export class Viewport {
         this.camera.far = desiredFar;
         this.camera.updateProjectionMatrix();
       }
+
+      this.updateFogForDepth(paddedBackDistance);
     }
   }
 
@@ -669,5 +675,27 @@ export class Viewport {
     this.directionalLight.position.copy(this.camera.position);
     this.directionalLight.target.position.copy(this.target);
     this.directionalLight.target.updateMatrixWorld();
+  }
+
+  /**
+   * Пересчитывает плотность тумана в зависимости от глубины сцены, скрывая дальний план.
+   * @param {number} depth Расстояние от камеры до дальней границы содержимого в мировых единицах.
+   * @returns {void}
+   */
+  private updateFogForDepth(depth: number): void {
+    if (!this.scene || !Number.isFinite(depth) || depth <= 0) {
+      return;
+    }
+
+    let fog = this.scene.fog;
+    if (!(fog instanceof FogExp2)) {
+      fog = new FogExp2(this.fogColor.clone(), Number.EPSILON);
+      this.scene.fog = fog;
+    }
+
+    const safeDepth = Math.max(depth, Number.EPSILON);
+    const density = -Math.log(this.fogTargetTransmittance) / safeDepth;
+    fog.density = density;
+    fog.color.copy(this.fogColor);
   }
 }
