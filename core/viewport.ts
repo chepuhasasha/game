@@ -52,6 +52,7 @@ export class Viewport {
   private readonly zoomEpsilon = 1e-4;
   private readonly fogColor = new Color(0x05060a);
   private readonly fogTargetTransmittance = 0.25;
+  private readonly zoomAwareObjects = new Set<{ handleZoomChange: (zoom: number) => void }>();
 
   /**
    * Создаёт приложение и привязывает его к контейнеру.
@@ -217,6 +218,16 @@ export class Viewport {
     if (typeof maybeUpdatable.update === "function") {
       this.updatables.add(maybeUpdatable as Updatable);
     }
+
+    const maybeZoomAware = obj as unknown as {
+      handleZoomChange?: (zoom: number) => void;
+    };
+    if (typeof maybeZoomAware.handleZoomChange === "function") {
+      this.zoomAwareObjects.add(maybeZoomAware as {
+        handleZoomChange: (zoom: number) => void;
+      });
+      maybeZoomAware.handleZoomChange(this.zoom);
+    }
   }
 
   /**
@@ -235,6 +246,25 @@ export class Viewport {
     this.updatables.delete(obj as unknown as Updatable);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
+
+    const maybeZoomAware = obj as unknown as {
+      handleZoomChange?: (zoom: number) => void;
+    };
+    if (typeof maybeZoomAware.handleZoomChange === "function") {
+      this.zoomAwareObjects.delete(maybeZoomAware as {
+        handleZoomChange: (zoom: number) => void;
+      });
+    }
+  }
+
+  /**
+   * Уведомляет объекты, реагирующие на изменения zoom, о новом значении.
+   * @returns {void}
+   */
+  private notifyZoomAwareObjects(): void {
+    this.zoomAwareObjects.forEach((object) => {
+      object.handleZoomChange(this.zoom);
+    });
   }
 
   /**
@@ -355,6 +385,7 @@ export class Viewport {
     this.targetZoom = nextZoom;
     this.camera.zoom = nextZoom;
     this.camera.updateProjectionMatrix();
+    this.notifyZoomAwareObjects();
   }
 
   /**
@@ -502,6 +533,7 @@ export class Viewport {
       if (difference > 0) {
         this.camera.updateProjectionMatrix();
       }
+      this.notifyZoomAwareObjects();
       return;
     }
 
@@ -516,6 +548,15 @@ export class Viewport {
     if (differenceToNext > 0) {
       this.camera.updateProjectionMatrix();
     }
+    this.notifyZoomAwareObjects();
+  }
+
+  /**
+   * Возвращает текущее значение zoom ортографической камеры.
+   * @returns {number} Фактический zoom камеры.
+   */
+  getCurrentZoom(): number {
+    return this.zoom;
   }
 
   /**

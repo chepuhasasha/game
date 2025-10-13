@@ -30,6 +30,7 @@ type LayoutSize = {
 type RingRadii = {
   inner: number;
   outer: number;
+  baseZoom: number;
 };
 
 type RotationRingPanResponderParams = {
@@ -239,9 +240,13 @@ const isPointInRotationRing = (
     return false;
   }
 
+  const currentZoom = viewportInstance.getCurrentZoom();
+  const compensation = ringRadii.baseZoom / Math.max(Number.EPSILON, currentZoom);
   const distance = Math.hypot(worldPoint.x, worldPoint.z);
+  const innerRadius = ringRadii.inner * compensation;
+  const outerRadius = ringRadii.outer * compensation;
 
-  return distance >= ringRadii.inner && distance <= ringRadii.outer;
+  return distance >= innerRadius && distance <= outerRadius;
 };
 
 /**
@@ -423,11 +428,16 @@ const populateViewportContent = (viewportInstance: Viewport): RingRadii => {
     innerRadius: ringInnerRadius,
     outerRadius: ringOuterRadius,
     positionY: RING_FLOOR_OFFSET,
+    baseZoom: DEFAULT_CAMERA_ZOOM,
   });
   viewportInstance.add(rotationRing, { excludeFromFit: true });
   viewportInstance.fitToContent();
 
-  return { inner: ringInnerRadius, outer: ringOuterRadius };
+  return {
+    inner: ringInnerRadius,
+    outer: ringOuterRadius,
+    baseZoom: DEFAULT_CAMERA_ZOOM,
+  };
 };
 
 type ViewPortProps = {
