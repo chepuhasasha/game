@@ -261,10 +261,18 @@ const useRotationRingPanResponder = ({
   const isRotationGestureActiveRef = useRef(false);
 
   /**
-   * Сбрасывает накопленные значения жеста и флаг активности.
+   * Обнуляет накопленное смещение жеста, сохраняя текущий статус активности.
    * @returns {void}
    */
-  const resetGestureTracking = useCallback((): void => {
+  const resetGestureDelta = useCallback((): void => {
+    lastDxRef.current = 0;
+  }, []);
+
+  /**
+   * Сбрасывает жест и завершает обработку вращения кольца.
+   * @returns {void}
+   */
+  const deactivateGesture = useCallback((): void => {
     lastDxRef.current = 0;
     isRotationGestureActiveRef.current = false;
   }, []);
@@ -287,12 +295,12 @@ const useRotationRingPanResponder = ({
 
       if (shouldHandle) {
         isRotationGestureActiveRef.current = true;
-        lastDxRef.current = 0;
+        resetGestureDelta();
       }
 
       return shouldHandle;
     },
-    [layout, viewportRef, ringRadiiRef]
+    [layout, resetGestureDelta, viewportRef, ringRadiiRef]
   );
 
   /**
@@ -364,16 +372,17 @@ const useRotationRingPanResponder = ({
     return PanResponder.create({
       onStartShouldSetPanResponder: handlePanStart,
       onMoveShouldSetPanResponder: handleMoveShouldSetPanResponder,
-      onPanResponderGrant: resetGestureTracking,
+      onPanResponderGrant: resetGestureDelta,
       onPanResponderMove: handlePanResponderMove,
-      onPanResponderRelease: resetGestureTracking,
-      onPanResponderTerminate: resetGestureTracking,
+      onPanResponderRelease: deactivateGesture,
+      onPanResponderTerminate: deactivateGesture,
     });
   }, [
+    deactivateGesture,
     handleMoveShouldSetPanResponder,
     handlePanResponderMove,
     handlePanStart,
-    resetGestureTracking,
+    resetGestureDelta,
   ]);
 
   return panResponder;
