@@ -402,6 +402,14 @@ export class Viewport {
     this.camera.updateMatrixWorld(true);
     const matrix = new Matrix4().copy(this.camera.matrixWorldInverse);
 
+    const cameraPosition = this.camera.position.clone();
+    const forward = new Vector3()
+      .subVectors(this.target, cameraPosition)
+      .normalize();
+
+    let minDistance = Infinity;
+    let maxDistance = -Infinity;
+
     const corners = [
       new Vector3(box.min.x, box.min.y, box.min.z),
       new Vector3(box.min.x, box.min.y, box.max.z),
@@ -424,6 +432,12 @@ export class Viewport {
       maxX = Math.max(maxX, projected.x);
       minY = Math.min(minY, projected.y);
       maxY = Math.max(maxY, projected.y);
+      if (forward.lengthSq() > 0) {
+        const toCorner = corner.clone().sub(cameraPosition);
+        const distance = toCorner.dot(forward);
+        minDistance = Math.min(minDistance, distance);
+        maxDistance = Math.max(maxDistance, distance);
+      }
     });
 
     const width = maxX - minX;
@@ -442,6 +456,43 @@ export class Viewport {
 
     if (Number.isFinite(nextZoom) && nextZoom > 0) {
       this.setZoom(nextZoom);
+    }
+
+    if (forward.lengthSq() > 0) {
+      const depth = Math.max(maxDistance - minDistance, Number.EPSILON);
+      const depthMargin = depth * Math.max(0, marginRatio);
+
+      let paddedMinDistance = minDistance - depthMargin;
+      let paddedMaxDistance = maxDistance + depthMargin;
+
+      const minNear = 0.1;
+
+      if (paddedMinDistance <= minNear) {
+        const shift = minNear - paddedMinDistance;
+        if (Number.isFinite(shift) && shift > 0) {
+          this.camera.position.addScaledVector(forward, -shift);
+          this.camera.lookAt(this.target);
+          paddedMinDistance += shift;
+          paddedMaxDistance += shift;
+
+          const updatedOffset = new Vector3()
+            .copy(this.camera.position)
+            .sub(this.target);
+          this.orbitRadius = Math.hypot(updatedOffset.x, updatedOffset.z);
+          this.cameraHeightOffset = updatedOffset.y;
+        }
+      }
+
+      this.camera.updateMatrixWorld(true);
+
+      const desiredNear = Math.max(minNear, paddedMinDistance);
+      const desiredFar = Math.max(desiredNear + 1, paddedMaxDistance);
+
+      if (Number.isFinite(desiredNear) && Number.isFinite(desiredFar)) {
+        this.camera.near = desiredNear;
+        this.camera.far = desiredFar;
+        this.camera.updateProjectionMatrix();
+      }
     }
   }
 }
