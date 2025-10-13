@@ -2,7 +2,7 @@ import type { MaterialName } from "./materials";
 
 export type BoxLocation = "QUEUE" | "BUFFER" | "ACTIVE" | "CONTAINER";
 
-export type BoxDebuff = "FRAGILE" | "NON_TILTABLE";
+export type BoxDebuff = "FRAGILE" | "NON_TILTABLE" | "HEAVY";
 
 export interface Point {
   x: number;
