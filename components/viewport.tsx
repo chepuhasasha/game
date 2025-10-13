@@ -8,14 +8,38 @@ import { BoxObject, generateBoxes, createRng, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
 
+type RotationStepStatusHandler =
+  NonNullable<InstanceType<typeof Audio.Sound>["setOnPlaybackStatusUpdate"]>;
+type RotationStepPlaybackStatus = Parameters<RotationStepStatusHandler>[0];
+
 export const ViewPort = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const lastDx = useRef(0);
   const lastStepTimeRef = useRef(Date.now());
   const rotationStepSoundRef = useRef<Audio.Sound | null>(null);
+  const isRotationStepSoundLoadedRef = useRef(false);
+  const isRotationStepSoundPlayingRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
+
+    /**
+     * Обрабатывает обновления статуса воспроизведения звука шага вращения.
+     * @param {RotationStepPlaybackStatus} status Текущий статус воспроизведения.
+     * @returns {void}
+     */
+    const handleRotationStepSoundStatus = (
+      status: RotationStepPlaybackStatus
+    ): void => {
+      if (!status.isLoaded) {
+        isRotationStepSoundLoadedRef.current = false;
+        isRotationStepSoundPlayingRef.current = false;
+        return;
+      }
+
+      isRotationStepSoundLoadedRef.current = true;
+      isRotationStepSoundPlayingRef.current = status.isPlaying ?? false;
+    };
 
     /**
      * Загружает звуковой эффект шага вращения.
@@ -29,6 +53,7 @@ export const ViewPort = (): JSX.Element => {
 
         if (isMounted) {
           rotationStepSoundRef.current = sound;
+          sound.setOnPlaybackStatusUpdate(handleRotationStepSoundStatus);
         } else {
           void sound.unloadAsync();
         }
@@ -41,11 +66,33 @@ export const ViewPort = (): JSX.Element => {
 
     return () => {
       isMounted = false;
-      if (rotationStepSoundRef.current !== null) {
-        void rotationStepSoundRef.current.unloadAsync();
+      const sound = rotationStepSoundRef.current;
+      if (sound !== null) {
+        sound.setOnPlaybackStatusUpdate(null);
+        void sound.unloadAsync();
         rotationStepSoundRef.current = null;
       }
+      isRotationStepSoundLoadedRef.current = false;
+      isRotationStepSoundPlayingRef.current = false;
     };
+  }, []);
+
+  /**
+   * Запускает звук шага вращения с начала, обеспечивая корректное воспроизведение при частых событиях.
+   * @returns {void}
+   */
+  const playRotationStepSound = useCallback((): void => {
+    const sound = rotationStepSoundRef.current;
+    if (sound === null || !isRotationStepSoundLoadedRef.current) {
+      return;
+    }
+
+    if (isRotationStepSoundPlayingRef.current) {
+      void sound.setStatusAsync({ positionMillis: 0, shouldPlay: true });
+      return;
+    }
+
+    void sound.playFromPositionAsync(0);
   }, []);
 
   /**
@@ -58,12 +105,9 @@ export const ViewPort = (): JSX.Element => {
     if (time - lastStepTimeRef.current >= 100) {
       lastStepTimeRef.current = time;
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const sound = rotationStepSoundRef.current;
-      if (sound !== null) {
-        void sound.replayAsync();
-      }
+      playRotationStepSound();
     }
-  }, []);
+  }, [playRotationStepSound]);
 
   /**
    * Обрабатывает изменение горизонтального свайпа и вращает сцену.
