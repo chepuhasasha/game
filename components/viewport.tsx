@@ -3,7 +3,7 @@ import { PanResponder, StyleSheet } from "react-native";
 import { GLView } from "expo-gl";
 import type { ExpoWebGLRenderingContext } from "expo-gl";
 import * as Haptics from "expo-haptics";
-import { BoxObject, Viewport } from "@/core";
+import { BoxObject, generateBoxes, Viewport } from "@/core";
 
 const ROTATION_STEP_ANGLE = Math.PI / 18;
 
@@ -38,42 +38,26 @@ export const ViewPort = (): JSX.Element => {
     (gl: ExpoWebGLRenderingContext): void => {
       viewport.current = new Viewport(gl);
       viewport.current.init();
-      viewport.current.setZoom(0.5);
+      viewport.current.setZoom(0.4);
       viewport.current.setRotationStepFeedback(
         ROTATION_STEP_ANGLE,
         handleRotationStep
       );
-
-      const box = new BoxObject({
-        id: 1,
-        position: {
-          x: 1,
-          y: 1,
-          z: 1,
-        },
-        width: 1,
-        height: 1,
-        depth: 1,
-        material: "glass",
-        debuffs: [],
-        location: "CONTAINER",
+      const boxes = generateBoxes(
+        4,
+        2,
+        123456
+      );
+      boxes.forEach((b) => {
+        const box = new BoxObject({
+          id: 1,
+          material: Math.random() > 0.7 ? "standart" : "glass",
+          debuffs: [],
+          location: "CONTAINER",
+          ...b
+        });
+        viewport.current?.add(box);
       });
-      const box2 = new BoxObject({
-        id: 1,
-        position: {
-          x: -0.5,
-          y: 1,
-          z: -0.5,
-        },
-        width: 1,
-        height: 1,
-        depth: 1,
-        material: "standart",
-        debuffs: [],
-        location: "CONTAINER",
-      });
-      viewport.current.add(box);
-      viewport.current.add(box2);
     },
     [handleRotationStep]
   );

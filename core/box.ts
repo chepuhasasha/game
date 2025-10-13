@@ -1,66 +1,43 @@
 import { BufferGeometry, Material, Mesh } from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Updatable } from "./updatable";
-import type { Box } from "./types";
+import type { GameBox } from "./types";
 import { materials } from "./materials";
 
-const DEFAULT_CORNER_RATIO = 0.08;
-const DEFAULT_CORNER_SMOOTHNESS = 4;
+/** Фиксированный радиус скругления в мировых единицах. */
+const EDGE_RADIUS = 0.2;   // подбери визуально; при 1×1×1 видно стабильно
+const EDGE_SEGMENTS = 4;    // сглаженность (целое ≥1)
 
-/** Простой вращающийся куб со скруглёнными рёбрами. */
 export class BoxObject extends Mesh implements Updatable {
-  /**
-   * Создаёт куб с базовым материалом.
-   * @param {Box} box Параметры коробки.
-   */
-  constructor(box: Box) {
+  constructor(box: GameBox) {
     super(
+      // Порядок как в твоём рабочем коде: (w,h,d, smoothness, radius)
       new RoundedBoxGeometry(
         box.width,
         box.height,
         box.depth,
-        BoxObject.resolveCornerSmoothness(box),
+        BoxObject.resolveCornerSmoothness(),
         BoxObject.resolveCornerRadius(box)
       ),
       materials[box.material]
     );
-    this.position.set(box.position.x, box.position.y, box.position.z);
+    this.position.set(box.x, box.y, box.z);
   }
 
-  /**
-   * Вычисляет радиус скругления рёбер с учётом размеров коробки.
-   * @param {Box} box Параметры коробки.
-   * @returns {number} Допустимое значение радиуса скругления.
-   */
-  private static resolveCornerRadius(box: Box): number {
-    const minDimension = Math.min(box.width, box.height, box.depth);
-    const requested = minDimension * DEFAULT_CORNER_RATIO;
-    const maxRadius = minDimension / 2 - Number.EPSILON;
-    return Math.max(Math.min(requested, maxRadius), 0);
+  /** Радиус фиксированный, но не больше половины меньшей стороны. */
+  private static resolveCornerRadius(box: GameBox): number {
+    const halfMin = Math.min(box.width, box.height, box.depth) * 0.5 - 1e-6;
+    return Math.min(Math.max(EDGE_RADIUS, 0), halfMin);
   }
 
-  /**
-   * Определяет сглаженность скругления рёбер.
-   * @param {Box} box Параметры коробки.
-   * @returns {number} Количество сегментов для сглаживания.
-   */
-  private static resolveCornerSmoothness(box: Box): number {
-    return Math.max(Math.floor(DEFAULT_CORNER_SMOOTHNESS), 1);
+  private static resolveCornerSmoothness(): number {
+    return Math.max(1, Math.floor(EDGE_SEGMENTS));
   }
 
-  /**
-   * Вращает куб вокруг оси Y.
-   * @param {number} dt Дельта времени в секундах.
-   * @returns {void}
-   */
   update(dt: number): void {
-    this.rotation.y += 1.0 * dt;
+    // this.rotation.y += 1.0 * dt;
   }
 
-  /**
-   * Освобождает ресурсы геометрии и материала.
-   * @returns {void}
-   */
   dispose(): void {
     const g = this.geometry as BufferGeometry | undefined;
     const m = this.material as Material | Material[] | undefined;
