@@ -47,14 +47,21 @@ const fragmentShader = /* glsl */ `
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
 
-  float noise(vec2 p) {
+  vec2 wrapPeriod(vec2 cell, vec2 period) {
+    return mod(mod(cell, period) + period, period);
+  }
+
+  float periodicNoise(vec2 p, vec2 period) {
     vec2 i = floor(p);
     vec2 f = fract(p);
 
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
+    vec2 wrap = wrapPeriod(i, period);
+    vec2 wrap1 = wrapPeriod(i + 1.0, period);
+
+    float a = hash(wrap);
+    float b = hash(vec2(wrap1.x, wrap.y));
+    float c = hash(vec2(wrap.x, wrap1.y));
+    float d = hash(wrap1);
 
     vec2 u = f * f * (3.0 - 2.0 * f);
 
@@ -67,52 +74,65 @@ const fragmentShader = /* glsl */ `
     return mat2(c, -s, s, c);
   }
 
-  float fbm(vec2 p) {
+  float fbm(vec2 p, vec2 period) {
     float value = 0.0;
     float amplitude = 0.5;
-    mat2 rotation = mat2(0.8, -0.6, 0.6, 0.8);
+    vec2 shift = vec2(37.0, 17.0);
 
     for (int i = 0; i < 6; i++) {
-      value += amplitude * noise(p);
-      p = rotation * p * 2.05;
+      value += amplitude * periodicNoise(p, period);
+      p = p * 2.02 + shift;
+      period *= 2.02;
       amplitude *= 0.5;
     }
 
     return value;
   }
 
-  vec2 domainWarp(vec2 p, vec2 flow, float t) {
-    vec2 warp = vec2(fbm(p + flow * t), fbm(p + rotate2d(1.256) * flow * t));
+  vec2 domainWarp(vec2 p, vec2 flow, float t, vec2 period) {
+    vec2 warp = vec2(
+      fbm(p + flow * t, period),
+      fbm(p + rotate2d(1.256) * flow * t, period)
+    );
     warp *= 0.7;
-    warp += vec2(fbm(p * 2.0 - flow.yx * t * 1.3), fbm(p * 2.3 + flow.xy * t * 1.1)) * 0.45;
+    vec2 doubledPeriod = period * 2.0;
+    warp += vec2(
+      fbm(p * 2.0 - flow.yx * t * 1.3, doubledPeriod),
+      fbm(p * 2.3 + flow.xy * t * 1.1, doubledPeriod * 1.15)
+    ) * 0.45;
     return p + warp;
   }
 
   void main() {
-    vec2 centeredUv = vUv - 0.5;
+    vec2 uv = vUv;
+    vec2 tiledUv = uv * 4.0;
     vec2 flow = normalize(flowDirection + 0.0001);
     float t = time * 0.8;
+    vec2 basePeriod = vec2(4.0);
 
-    vec2 warpedUv = domainWarp(centeredUv * 3.2, flow, t);
-    vec2 secondaryWarp = domainWarp(warpedUv * 1.8, flow.yx, t * 1.35);
+    vec2 warpedUv = domainWarp(tiledUv, flow, t, basePeriod);
+    vec2 secondaryWarp = domainWarp(warpedUv * 1.6, flow.yx, t * 1.35, basePeriod * 1.6);
 
-    float primaryLayer = fbm(warpedUv + flow * t * 1.4);
-    float secondaryLayer = fbm(secondaryWarp - flow.yx * t * 0.9);
-    float swirl = fbm(rotate2d(t * 0.3) * (centeredUv * 2.4));
+    float primaryLayer = fbm(warpedUv + flow * t * 1.4, basePeriod);
+    float secondaryLayer = fbm(secondaryWarp - flow.yx * t * 0.9, basePeriod * 1.6);
+    float swirl = fbm(rotate2d(t * 0.3) * (uv * 2.4 + flow.yx * 0.5), basePeriod * 2.4);
 
     float pattern = mix(primaryLayer, secondaryLayer, 0.55) + swirl * 0.35;
     float contrastPattern = smoothstep(0.25, 0.75, pattern);
 
     vec3 color = mix(baseColor, secondaryColor, contrastPattern);
 
-    float highlightMask = smoothstep(0.65, 0.92, pattern + fbm(warpedUv * 2.8 + t * 1.7) * 0.35);
-    float shimmer = fbm(secondaryWarp * 3.2 + t * 2.0);
+    float highlightMask = smoothstep(
+      0.65,
+      0.92,
+      pattern + fbm(warpedUv * 2.3 + t * 1.7, basePeriod * 2.3) * 0.35
+    );
+    float shimmer = fbm(secondaryWarp * 2.6 + t * 2.0, basePeriod * 2.6);
 
     color += highlightColor * shimmer * 0.25;
     color = mix(color, highlightColor, pow(highlightMask, 3.5) * 0.55);
 
-    float edgeFade = smoothstep(0.9, 0.2, length(centeredUv));
-    float animatedOpacity = clamp(opacity * edgeFade + shimmer * 0.15, 0.0, 1.0);
+    float animatedOpacity = clamp(opacity + shimmer * 0.08, 0.0, 1.0);
 
     gl_FragColor = vec4(color, animatedOpacity);
   }
@@ -161,6 +181,7 @@ export const createLiquidMaterial = (
 
   material.extensions = { ...material.extensions, derivatives: true };
   material.userData.renderOrder = 10;
+  material.depthWrite = false;
 
   const getNow = () =>
     (typeof performance !== "undefined" ? performance.now() : Date.now()) *
