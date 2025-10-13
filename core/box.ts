@@ -22,6 +22,11 @@ export class BoxObject extends Mesh implements Updatable {
       materials[box.material]
     );
     this.position.set(box.x, box.y, box.z);
+
+    const material = this.material as Material | Material[] | undefined;
+    if (!Array.isArray(material) && material?.userData?.renderOrder !== undefined) {
+      this.renderOrder = material.userData.renderOrder;
+    }
   }
 
   /** Радиус фиксированный, но не больше половины меньшей стороны. */

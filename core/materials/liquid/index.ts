@@ -160,6 +160,7 @@ export const createLiquidMaterial = (
   }) as LiquidShaderMaterial;
 
   material.extensions = { ...material.extensions, derivatives: true };
+  material.userData.renderOrder = 10;
 
   const getNow = () =>
     (typeof performance !== "undefined" ? performance.now() : Date.now()) *

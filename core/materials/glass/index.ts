@@ -29,7 +29,8 @@ export const createGlassMaterial = (): MeshPhysicalMaterial => {
   material.toneMapped = true;
   material.sheen = 0.25;
   material.sheenRoughness = 0.85;
-  material.depthWrite = false;
+  material.depthWrite = true;
   material.depthTest = true;
+  material.userData.renderOrder = 20;
   return material;
 };
