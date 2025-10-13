@@ -181,7 +181,8 @@ export const createLiquidMaterial = (
 
   material.extensions = { ...material.extensions, derivatives: true };
   material.userData.renderOrder = 10;
-  material.depthWrite = false;
+  material.depthWrite = true;
+  material.depthTest = true;
 
   const getNow = () =>
     (typeof performance !== "undefined" ? performance.now() : Date.now()) *
