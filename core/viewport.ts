@@ -29,6 +29,11 @@ export class Viewport {
   private pmremGenerator: PMREMGenerator | null = null;
   private environmentTarget: WebGLRenderTarget | null = null;
   private contentRoot: Object3D | null = null;
+  private fitExclusions = new Set<Object3D>();
+  private readonly screenRayOrigin = new Vector3();
+  private readonly screenRayTarget = new Vector3();
+  private readonly screenRayDirection = new Vector3();
+  private readonly screenIntersectionPoint = new Vector3();
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -95,6 +100,19 @@ export class Viewport {
   }
 
   /**
+   * Предоставляет размеры буфера рендеринга в пикселях для расчётов вьюпорта.
+   * @returns {{ width: number; height: number } | null} Объект с шириной и высотой либо null.
+   */
+  getViewportSize(): { width: number; height: number } | null {
+    const { w, h } = this.size();
+    if (w === 0 || h === 0) {
+      return null;
+    }
+
+    return { width: w, height: h };
+  }
+
+  /**
    * Создаёт ортографическую камеру под заданный размер вьюпорта.
    * @param {number} w Ширина.
    * @param {number} h Высота.
@@ -116,17 +134,78 @@ export class Viewport {
   }
 
   /**
+   * Находит точку пересечения луча из экрана с горизонтальной плоскостью на заданной высоте.
+   * @param {number} screenX Горизонтальная координата экрана в пикселях.
+   * @param {number} screenY Вертикальная координата экрана в пикселях.
+   * @param {number} planeY Высота плоскости в мировых координатах.
+   * @returns {Vector3 | null} Точка пересечения в мировых координатах либо null, если пересечения нет.
+   */
+  screenPointToWorldOnPlane(
+    screenX: number,
+    screenY: number,
+    planeY: number
+  ): Vector3 | null {
+    if (!this.camera) {
+      return null;
+    }
+
+    const { w, h } = this.size();
+    if (w === 0 || h === 0) {
+      return null;
+    }
+
+    const ndcX = (screenX / w) * 2 - 1;
+    const ndcY = -((screenY / h) * 2 - 1);
+
+    const origin = this.screenRayOrigin
+      .set(ndcX, ndcY, -1)
+      .unproject(this.camera);
+    const target = this.screenRayTarget
+      .set(ndcX, ndcY, 1)
+      .unproject(this.camera);
+    const direction = this.screenRayDirection.copy(target).sub(origin);
+
+    if (direction.lengthSq() === 0) {
+      return null;
+    }
+
+    direction.normalize();
+    const denominator = direction.y;
+
+    if (Math.abs(denominator) < 1e-6) {
+      return null;
+    }
+
+    const t = (planeY - origin.y) / denominator;
+
+    if (!Number.isFinite(t) || t < 0) {
+      return null;
+    }
+
+    return this.screenIntersectionPoint
+      .copy(origin)
+      .add(direction.multiplyScalar(t));
+  }
+
+  /**
    * Добавляет объект на сцену.
    * Если у объекта есть метод update, регистрирует его для кадровых обновлений.
+   * При передаче флага excludeFromFit объект будет игнорироваться при fitToContent.
    * @param {Object3D} obj Трёхмерный объект.
+   * @param {{ excludeFromFit?: boolean }} [options] Параметры добавления объекта.
    * @returns {void}
    */
-  add(obj: Object3D): void {
+  add(obj: Object3D, options?: { excludeFromFit?: boolean }): void {
     if (this.contentRoot) {
       this.contentRoot.add(obj);
     } else {
       this.scene.add(obj);
     }
+
+    if (options?.excludeFromFit) {
+      this.fitExclusions.add(obj);
+    }
+
     const maybeUpdatable = obj as unknown as Partial<Updatable>;
     if (typeof maybeUpdatable.update === "function") {
       this.updatables.add(maybeUpdatable as Updatable);
@@ -145,9 +224,43 @@ export class Viewport {
     } else {
       this.scene.remove(obj);
     }
+    this.fitExclusions.delete(obj);
     this.updatables.delete(obj as unknown as Updatable);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
+  }
+
+  /**
+   * Вычисляет ограничивающий параллелепипед для объектов сцены, учитываемых fitToContent.
+   * @returns {Box3 | null} Объём ограничивающего параллелепипеда или null, если нет объектов.
+   */
+  private computeFitBoundingBox(): Box3 | null {
+    if (!this.contentRoot) {
+      return null;
+    }
+
+    const box = new Box3();
+    let hasBox = false;
+
+    for (const child of this.contentRoot.children) {
+      if (this.fitExclusions.has(child)) {
+        continue;
+      }
+
+      const childBox = new Box3().setFromObject(child);
+      if (!Number.isFinite(childBox.min.x) || childBox.isEmpty()) {
+        continue;
+      }
+
+      if (!hasBox) {
+        box.copy(childBox);
+        hasBox = true;
+      } else {
+        box.union(childBox);
+      }
+    }
+
+    return hasBox ? box : null;
   }
 
   /**
@@ -387,10 +500,10 @@ export class Viewport {
    * @returns {void}
    */
   fitToContent(marginRatio = 0.1): void {
-    if (!this.camera || !this.contentRoot) return;
+    if (!this.camera) return;
 
-    const box = new Box3().setFromObject(this.contentRoot);
-    if (!Number.isFinite(box.min.x) || box.isEmpty()) {
+    const box = this.computeFitBoundingBox();
+    if (!box) {
       return;
     }
 
