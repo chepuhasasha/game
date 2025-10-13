@@ -199,11 +199,10 @@ export const RectJoystick = ({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: "rgba(148, 163, 184, 0.16)",
+    height: 200,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.3)",
+    borderColor: "rgba(255,255,255, 0.1)",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
   handle: {
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
-    borderRadius: 8,
-    backgroundColor: "rgba(226, 232, 240, 0.25)",
+    borderRadius: '50%',
+    backgroundColor: "rgba(255,255,255, 1)",
   },
 });
