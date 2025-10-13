@@ -1,4 +1,9 @@
-import { BufferGeometry, Material, Mesh } from "three";
+import {
+  BufferGeometry,
+  Material,
+  Mesh,
+  MeshDepthMaterial,
+} from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { Updatable } from "./updatable";
 import type { GameBox } from "./types";
@@ -24,8 +29,15 @@ export class BoxObject extends Mesh implements Updatable {
     this.position.set(box.x, box.y, box.z);
 
     const material = this.material as Material | Material[] | undefined;
-    if (!Array.isArray(material) && material?.userData?.renderOrder !== undefined) {
-      this.renderOrder = material.userData.renderOrder;
+    if (!Array.isArray(material) && material) {
+      const { renderOrder, depthMaterial } = material.userData ?? {};
+      if (renderOrder !== undefined) {
+        this.renderOrder = renderOrder;
+      }
+      if (depthMaterial instanceof MeshDepthMaterial) {
+        this.customDepthMaterial = depthMaterial;
+        this.customDistanceMaterial = depthMaterial;
+      }
     }
   }
 
