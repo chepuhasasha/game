@@ -473,7 +473,8 @@ export const ViewPort = ({
     }
 
     restZoomRef.current = instance.getZoom();
-    instance.smoothZoomTo(ROTATION_ACTIVE_CAMERA_ZOOM);
+    const targetZoom = Math.min(restZoomRef.current, ROTATION_ACTIVE_CAMERA_ZOOM);
+    instance.smoothZoomTo(targetZoom);
   }, [restZoomRef, viewport]);
 
   /**
