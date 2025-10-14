@@ -15,6 +15,7 @@ import {
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
 import { configureRendererPhysicMaterials } from "./materials";
+import { BlackoutFX } from "./effects";
 
 export class Viewport {
   private scene!: Scene;
@@ -31,6 +32,7 @@ export class Viewport {
   private readonly screenRayTarget = new Vector3();
   private readonly screenRayDirection = new Vector3();
   private readonly screenIntersectionPoint = new Vector3();
+  private blackoutFx: BlackoutFX | null = null;
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -84,6 +86,8 @@ export class Viewport {
     configureRendererPhysicMaterials(this.renderer);
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(1);
+    this.blackoutFx?.dispose();
+    this.blackoutFx = null;
 
     this.scene.add(new AmbientLight(0xffffff, 1));
     const dir = new DirectionalLight(0xffffff, 5);
@@ -310,7 +314,12 @@ export class Viewport {
     this.updateCameraRotation(dt);
     this.updateCameraZoom(dt);
     this.updatables.forEach((u) => u.update(dt));
-    this.renderer.render(this.scene, this.camera);
+    const fx = this.blackoutFx;
+    if (fx) {
+      fx.render(this.scene, this.camera);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.gl.endFrameEXP();
     this.raf = requestAnimationFrame(this.loop);
   };
@@ -332,12 +341,65 @@ export class Viewport {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     this.clear();
+    if (this.blackoutFx) {
+      this.blackoutFx.dispose();
+      this.blackoutFx = null;
+    }
     this.renderer?.dispose();
     if (this.directionalLight) {
       this.scene.remove(this.directionalLight);
       this.scene.remove(this.directionalLight.target);
       this.directionalLight = null;
     }
+  }
+
+  /**
+   * Обеспечивает доступ к эффекту затемнения, создавая его при необходимости.
+   * @returns {BlackoutFX} Экземпляр эффекта BlackoutFX.
+   */
+  getBlackoutFx(): BlackoutFX {
+    return this.ensureBlackoutFx();
+  }
+
+  /**
+   * Плавно скрывает сцену с использованием эффекта затемнения.
+   * @returns {Promise<void>} Промис, выполняющийся по завершении анимации.
+   */
+  async hideWithBlackout(): Promise<void> {
+    const fx = this.ensureBlackoutFx();
+    await fx.hide();
+  }
+
+  /**
+   * Плавно показывает сцену, отменяя затемнение.
+   * @returns {Promise<void>} Промис, выполняющийся по завершении анимации.
+   */
+  async showWithBlackout(): Promise<void> {
+    const fx = this.ensureBlackoutFx();
+    await fx.show();
+  }
+
+  /**
+   * Создаёт или возвращает текущий экземпляр BlackoutFX.
+   * @returns {BlackoutFX} Готовый к работе эффект затемнения.
+   */
+  private ensureBlackoutFx(): BlackoutFX {
+    if (this.blackoutFx !== null) {
+      return this.blackoutFx;
+    }
+
+    if (!this.renderer || !this.scene || !this.camera) {
+      throw new Error("Viewport не инициализирован: эффект затемнения недоступен.");
+    }
+
+    const fx = new BlackoutFX(this.renderer, this.scene, this.camera);
+    const { w, h } = this.size();
+    if (w > 0 && h > 0) {
+      fx.setSize(w, h);
+    }
+    fx.setTarget(this.scene, this.camera);
+    this.blackoutFx = fx;
+    return fx;
   }
 
   /**
