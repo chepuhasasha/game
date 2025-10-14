@@ -245,6 +245,9 @@ export class BlackoutFX {
     this.originalRendererSettings = { ...initialSettings };
 
     this.applyRendererOverrides();
+
+    this.setThreshold(0);
+    this.enable();
   }
 
   /**
@@ -355,7 +358,6 @@ export class BlackoutFX {
    */
   async hide(): Promise<void> {
     this.enable();
-    this.setThreshold(1.0);
     await this.animateThreshold(0.0);
   }
 
