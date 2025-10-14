@@ -22,7 +22,7 @@ const FX_DEFAULTS = Object.freeze({
 });
 
 /** Стандартная длительность анимации перехода в миллисекундах. */
-const FX_ANIMATION_MS = 800;
+const FX_ANIMATION_MS = 2000;
 
 /** GLSL-функции для генерации двумерного simplex-шуму. */
 const NOISE_GLSL = /* glsl */ `

@@ -427,6 +427,8 @@ const populateViewportContent = (viewportInstance: Viewport): RingRadii => {
   });
   viewportInstance.add(rotationRing, { excludeFromFit: true });
   viewportInstance.fitToContent();
+  viewportInstance.showWithBlackout()
+
 
   return { inner: ringInnerRadius, outer: ringOuterRadius };
 };
