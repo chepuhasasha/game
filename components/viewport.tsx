@@ -21,7 +21,6 @@ import {
   Viewport,
   RotationRingObject,
 } from "@/core";
-import { RectJoystick } from "./rect-joystick";
 
 type LayoutSize = {
   width: number;
