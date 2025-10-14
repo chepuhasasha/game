@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { JSX } from "react";
 
 import { ViewPort } from "@/components/viewport";
+import { Game } from "@/views/game";
 
 /**
  * Главный экран приложения со стартовым меню и трёхмерным вьюпортом.
@@ -41,7 +42,7 @@ export default function HomeScreen(): JSX.Element {
     <View style={styles.container}>
       {isGameStarted ? (
         <View style={styles.viewPortWrapper}>
-          <ViewPort
+          <Game
             isSoundEnabled={isSoundEnabled}
             isVibrationEnabled={isVibrationEnabled}
           />
