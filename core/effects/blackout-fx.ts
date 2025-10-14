@@ -1,5 +1,4 @@
 import {
-  ACESFilmicToneMapping,
   Camera,
   NoBlending,
   NoToneMapping,
@@ -7,6 +6,7 @@ import {
   SRGBColorSpace,
   Uniform,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -61,6 +61,84 @@ type ThresholdAnimation = {
  */
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
+/**
+ * Обеспечивает применение тонемаппинга и цветового пространства рендерера внутри OutputPass.
+ */
+class BlackoutOutputPass extends OutputPass {
+  private settings: {
+    outputColorSpace: WebGLRenderer["outputColorSpace"];
+    toneMapping: WebGLRenderer["toneMapping"];
+    toneMappingExposure: number;
+  };
+
+  /**
+   * Создаёт OutputPass с сохранёнными настройками рендерера.
+   * @param {{
+   *   outputColorSpace: WebGLRenderer["outputColorSpace"];
+   *   toneMapping: WebGLRenderer["toneMapping"];
+   *   toneMappingExposure: number;
+   * }} initialSettings Стартовые параметры рендерера.
+   */
+  constructor(initialSettings: {
+    outputColorSpace: WebGLRenderer["outputColorSpace"];
+    toneMapping: WebGLRenderer["toneMapping"];
+    toneMappingExposure: number;
+  }) {
+    super();
+    this.settings = { ...initialSettings };
+  }
+
+  /**
+   * Обновляет сохранённые настройки для применения при рендеринге OutputPass.
+   * @param {{
+   *   outputColorSpace: WebGLRenderer["outputColorSpace"];
+   *   toneMapping: WebGLRenderer["toneMapping"];
+   *   toneMappingExposure: number;
+   * }} nextSettings Актуальные параметры рендерера.
+   * @returns {void}
+   */
+  setSettings(nextSettings: {
+    outputColorSpace: WebGLRenderer["outputColorSpace"];
+    toneMapping: WebGLRenderer["toneMapping"];
+    toneMappingExposure: number;
+  }): void {
+    this.settings = { ...nextSettings };
+  }
+
+  /**
+   * Выполняет рендер с временным применением исходных настроек тонемаппинга.
+   * @param {WebGLRenderer} renderer Активный рендерер.
+   * @param {WebGLRenderTarget | null} writeBuffer Целевой буфер рендеринга.
+   * @param {WebGLRenderTarget} readBuffer Буфер с результатом предыдущего прохода.
+   * @param {number} [deltaTime] Дельта времени между кадрами.
+   * @param {boolean} [maskActive] Флаг активности маски.
+   * @returns {void}
+   */
+  render(
+    renderer: WebGLRenderer,
+    writeBuffer: WebGLRenderTarget | null,
+    readBuffer: WebGLRenderTarget,
+    deltaTime?: number,
+    maskActive?: boolean
+  ): void {
+    const previousState = {
+      outputColorSpace: renderer.outputColorSpace,
+      toneMapping: renderer.toneMapping,
+      toneMappingExposure: renderer.toneMappingExposure,
+    };
+
+    renderer.outputColorSpace = this.settings.outputColorSpace;
+    renderer.toneMapping = this.settings.toneMapping;
+    renderer.toneMappingExposure = this.settings.toneMappingExposure;
+
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+
+    renderer.outputColorSpace = previousState.outputColorSpace;
+    renderer.toneMapping = previousState.toneMapping;
+    renderer.toneMappingExposure = previousState.toneMappingExposure;
+  }
+}
+
 export class BlackoutFX {
   private readonly composer: EffectComposer;
 
@@ -68,7 +146,7 @@ export class BlackoutFX {
 
   private readonly shaderPass: ShaderPass;
 
-  private readonly outputPass: OutputPass;
+  private readonly outputPass: BlackoutOutputPass;
 
   private readonly uniforms: {
     strength: Uniform<number>;
@@ -86,6 +164,18 @@ export class BlackoutFX {
   };
 
   private rendererOverridesApplied = false;
+
+  /**
+   * Синхронизирует снимок настроек рендерера и OutputPass перед включением эффекта.
+   * @returns {void}
+   */
+  private captureRendererSettings(): void {
+    this.originalRendererSettings.outputColorSpace = this.renderer.outputColorSpace;
+    this.originalRendererSettings.toneMapping = this.renderer.toneMapping;
+    this.originalRendererSettings.toneMappingExposure =
+      this.renderer.toneMappingExposure;
+    this.outputPass.setSettings(this.originalRendererSettings);
+  }
 
   /**
    * Создаёт пост-эффект затемнения на основе simplex-шуму.
@@ -134,7 +224,12 @@ export class BlackoutFX {
     this.shaderPass.material.depthTest = false;
     this.shaderPass.material.blending = NoBlending;
 
-    this.outputPass = new OutputPass(ACESFilmicToneMapping);
+    const initialSettings = {
+      outputColorSpace: renderer.outputColorSpace,
+      toneMapping: renderer.toneMapping,
+      toneMappingExposure: renderer.toneMappingExposure,
+    };
+    this.outputPass = new BlackoutOutputPass(initialSettings);
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.shaderPass);
@@ -149,11 +244,7 @@ export class BlackoutFX {
 
     this.shaderPass.enabled = false;
 
-    this.originalRendererSettings = {
-      outputColorSpace: renderer.outputColorSpace,
-      toneMapping: renderer.toneMapping,
-      toneMappingExposure: renderer.toneMappingExposure,
-    };
+    this.originalRendererSettings = { ...initialSettings };
   }
 
   /**
@@ -165,10 +256,11 @@ export class BlackoutFX {
       return;
     }
 
+    this.captureRendererSettings();
     this.rendererOverridesApplied = true;
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NoToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = this.originalRendererSettings.toneMappingExposure;
   }
 
   /**
