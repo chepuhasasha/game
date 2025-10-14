@@ -1,12 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import {
-  BlackoutFX,
-  BlackoutFXPlugin,
-  Container,
-  EventName,
-  Viewport,
-} from "./core";
+import { BlackoutFX, Container, Viewport } from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {

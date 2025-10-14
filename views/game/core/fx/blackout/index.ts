@@ -6,6 +6,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 import fragmentShader from "./fragment.glsl";
 import vertexShader from "./vertex.glsl";
+
 import { FX } from "../../types";
 
 export interface BlackoutFXOptions {
