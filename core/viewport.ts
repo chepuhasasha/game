@@ -98,6 +98,7 @@ export class Viewport {
     this.scene.add(dir.target);
     this.updateDirectionalLight();
 
+    this.ensureBlackoutFx();
     this.render();
   }
 
@@ -314,12 +315,9 @@ export class Viewport {
     this.updateCameraRotation(dt);
     this.updateCameraZoom(dt);
     this.updatables.forEach((u) => u.update(dt));
-    const fx = this.blackoutFx;
-    if (fx?.isEnabled()) {
-      fx.render(this.scene, this.camera);
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
+    const fx = this.blackoutFx ?? this.ensureBlackoutFx();
+    fx.setTarget(this.scene, this.camera);
+    fx.render(this.scene, this.camera);
     this.gl.endFrameEXP();
     this.raf = requestAnimationFrame(this.loop);
   };

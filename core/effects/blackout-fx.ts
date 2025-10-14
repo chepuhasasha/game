@@ -163,8 +163,6 @@ export class BlackoutFX {
     toneMappingExposure: number;
   };
 
-  private rendererOverridesApplied = false;
-
   /**
    * Синхронизирует снимок настроек рендерера и OutputPass перед включением эффекта.
    * @returns {void}
@@ -245,6 +243,8 @@ export class BlackoutFX {
     this.shaderPass.enabled = false;
 
     this.originalRendererSettings = { ...initialSettings };
+
+    this.applyRendererOverrides();
   }
 
   /**
@@ -252,12 +252,7 @@ export class BlackoutFX {
    * @returns {void}
    */
   private applyRendererOverrides(): void {
-    if (this.rendererOverridesApplied) {
-      return;
-    }
-
     this.captureRendererSettings();
-    this.rendererOverridesApplied = true;
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NoToneMapping;
     this.renderer.toneMappingExposure = this.originalRendererSettings.toneMappingExposure;
@@ -268,11 +263,6 @@ export class BlackoutFX {
    * @returns {void}
    */
   private restoreRendererSettings(): void {
-    if (!this.rendererOverridesApplied) {
-      return;
-    }
-
-    this.rendererOverridesApplied = false;
     this.renderer.outputColorSpace = this.originalRendererSettings.outputColorSpace;
     this.renderer.toneMapping = this.originalRendererSettings.toneMapping;
     this.renderer.toneMappingExposure = this.originalRendererSettings.toneMappingExposure;
@@ -304,7 +294,6 @@ export class BlackoutFX {
    * @returns {void}
    */
   enable(): void {
-    this.applyRendererOverrides();
     this.shaderPass.enabled = true;
   }
 
@@ -314,7 +303,6 @@ export class BlackoutFX {
    */
   disable(): void {
     this.shaderPass.enabled = false;
-    this.restoreRendererSettings();
   }
 
   /**
