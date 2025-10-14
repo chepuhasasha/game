@@ -79,6 +79,14 @@ export class BlackoutFX {
 
   private animation: ThresholdAnimation | null = null;
 
+  private readonly originalRendererSettings: {
+    outputColorSpace: WebGLRenderer["outputColorSpace"];
+    toneMapping: WebGLRenderer["toneMapping"];
+    toneMappingExposure: number;
+  };
+
+  private rendererOverridesApplied = false;
+
   /**
    * Создаёт пост-эффект затемнения на основе simplex-шуму.
    * @param {WebGLRenderer} renderer Активный WebGL-рендерер.
@@ -141,9 +149,41 @@ export class BlackoutFX {
 
     this.shaderPass.enabled = false;
 
+    this.originalRendererSettings = {
+      outputColorSpace: renderer.outputColorSpace,
+      toneMapping: renderer.toneMapping,
+      toneMappingExposure: renderer.toneMappingExposure,
+    };
+  }
+
+  /**
+   * Применяет изменения настроек рендерера, необходимые для корректной работы эффекта.
+   * @returns {void}
+   */
+  private applyRendererOverrides(): void {
+    if (this.rendererOverridesApplied) {
+      return;
+    }
+
+    this.rendererOverridesApplied = true;
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NoToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+  }
+
+  /**
+   * Восстанавливает исходные параметры рендерера после отключения эффекта.
+   * @returns {void}
+   */
+  private restoreRendererSettings(): void {
+    if (!this.rendererOverridesApplied) {
+      return;
+    }
+
+    this.rendererOverridesApplied = false;
+    this.renderer.outputColorSpace = this.originalRendererSettings.outputColorSpace;
+    this.renderer.toneMapping = this.originalRendererSettings.toneMapping;
+    this.renderer.toneMappingExposure = this.originalRendererSettings.toneMappingExposure;
   }
 
   /**
@@ -172,6 +212,7 @@ export class BlackoutFX {
    * @returns {void}
    */
   enable(): void {
+    this.applyRendererOverrides();
     this.shaderPass.enabled = true;
   }
 
@@ -181,6 +222,7 @@ export class BlackoutFX {
    */
   disable(): void {
     this.shaderPass.enabled = false;
+    this.restoreRendererSettings();
   }
 
   /**
@@ -275,6 +317,7 @@ export class BlackoutFX {
       this.animation = null;
     }
 
+    this.restoreRendererSettings();
     this.composer.dispose();
   }
 

@@ -315,7 +315,7 @@ export class Viewport {
     this.updateCameraZoom(dt);
     this.updatables.forEach((u) => u.update(dt));
     const fx = this.blackoutFx;
-    if (fx) {
+    if (fx?.isEnabled()) {
       fx.render(this.scene, this.camera);
     } else {
       this.renderer.render(this.scene, this.camera);
