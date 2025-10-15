@@ -12,7 +12,7 @@ export class Container extends Mesh implements GameObject {
       new BoxGeometry(1, 1, 1),
       new MeshStandardMaterial({ color: 0xff0000 })
     );
-    this.position.set(Math.random(), 0, 0);
+    this.position.set(0, 0, 0);
   }
 
   update(dt: number): void {
