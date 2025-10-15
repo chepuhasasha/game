@@ -21,7 +21,7 @@ export const Game = ({
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
-      const container = new Container(6, 4);
+      const container = new Container(6, 1);
 
       const instance = new Viewport(gl)
         .init()
