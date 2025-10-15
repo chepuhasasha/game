@@ -1,6 +1,12 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Container, HeatHazeFX, Viewport } from "./core";
+import {
+  BlackoutFX,
+  Container,
+  HeatHazeFX,
+  OutlineFX,
+  Viewport,
+} from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -26,6 +32,15 @@ export const Game = ({
       const instance = new Viewport(gl)
         .init()
         .useFX(
+          "outline",
+          new OutlineFX({
+            color: 0xf6f6f6,
+            thickness: 1.35,
+            intensity: 1.0,
+            threshold: 0.2,
+          })
+        )
+        .useFX(
           "heatHaze",
           new HeatHazeFX({
             intensity: 0.75,
@@ -41,6 +56,8 @@ export const Game = ({
 
       instance.fitToObject(container);
 
+      instance.fx.outline.enable();
+      instance.fx.outline.play(1);
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
       // instance.fx.heatHaze.enable();
