@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { JSX } from "react";
 
-import { ViewPort } from "@/components/viewport";
 import { Game } from "@/views/game";
 
 /**
