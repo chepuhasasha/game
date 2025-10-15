@@ -30,7 +30,7 @@ export class BlackoutFX implements FX {
     camera: Camera,
     options: BlackoutFXOptions = {
       strength: 1.0,
-      scale: 2.3,
+      scale: 4.0,
       threshold: 0.0,
       edge: 0.0,
     }
@@ -72,7 +72,7 @@ export class BlackoutFX implements FX {
   render() {
     this.composer.render();
   }
-  async play(mode: "hide" | "show", duration = 200): Promise<void> {
+  async play(mode: "hide" | "show", duration = 2000): Promise<void> {
     if (mode === "hide") {
       this.setThreshold(1.0);
       await this.animateThreshold(0.0, duration);

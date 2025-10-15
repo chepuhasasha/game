@@ -73,7 +73,12 @@ export class Viewport {
 
   private loop = (t = 0): void => {
     this.emit(EventName.LOOP, t);
-    this.renderer.render(this.scene, this.camera);
+    const effects = Object.values(this.fx);
+    if (effects.length > 0) {
+      effects.forEach((fx) => fx.render());
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.gl.endFrameEXP();
   };
 
@@ -143,7 +148,6 @@ export class Viewport {
 
   useFX(name: string, fx: FX) {
     fx.setSize(this.size.width, this.size.height);
-    this.on(EventName.LOOP, () => fx.render());
     this.fx[name] = fx;
 
     return this;
