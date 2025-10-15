@@ -10,7 +10,7 @@ export interface GameObject {
   dispose(): void;
 }
 
-export interface FX<TPlayArgs extends unknown[] = []> {
+export interface FX<TPlayArgs extends unknown[] = unknown[]> {
   /** Включает эффект. */
   enable(): void;
   /** Отключает эффект. */

@@ -12,7 +12,7 @@ import {
 } from "three";
 import { EventName, type Extension, type FX } from "./types";
 
-type FXRegistry<TKey extends string = string> = Record<TKey, FX>;
+type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
 
 export class Viewport<TFx extends FXRegistry = FXRegistry> {
   readonly scene: Scene = new Scene();
@@ -22,7 +22,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
 
   private target = new Vector3(0, 0, 0);
 
-  private readonly fxStore: FXRegistry = {};
+  private readonly fxStore: Record<string, FX<unknown[]>> = {};
 
   private events: { [K in EventName]: ((data: unknown) => void)[] } = {
     [EventName.ROTATION_STEP]: [],
@@ -226,7 +226,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
    * @param {Effect} fx Экземпляр эффекта.
    * @returns {Viewport<TFx & Record<Name, Effect>>} Вьюпорт с учётом нового эффекта.
    */
-  useFX<Name extends string, Effect extends FX>(
+  useFX<Name extends string, Effect extends FX<unknown[]>>(
     name: Name,
     fx: Effect
   ): Viewport<TFx & Record<Name, Effect>> {
