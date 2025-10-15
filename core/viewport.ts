@@ -15,6 +15,7 @@ import {
 import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
 import { configureRendererPhysicMaterials } from "./materials";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export class Viewport {
   private scene!: Scene;
@@ -31,6 +32,7 @@ export class Viewport {
   private readonly screenRayTarget = new Vector3();
   private readonly screenRayDirection = new Vector3();
   private readonly screenIntersectionPoint = new Vector3();
+  private orbitControls: OrbitControls | null = null;
 
   // --- Управление камерой ---
   private target = new Vector3(0, 0, 0);
@@ -307,7 +309,11 @@ export class Viewport {
     if (dt > 0) {
       this.lastDeltaTime = dt;
     }
-    this.updateCameraRotation(dt);
+    if (this.orbitControls) {
+      this.orbitControls.update();
+    } else {
+      this.updateCameraRotation(dt);
+    }
     this.updateCameraZoom(dt);
     this.updatables.forEach((u) => u.update(dt));
     this.renderer.render(this.scene, this.camera);
@@ -333,6 +339,10 @@ export class Viewport {
     cancelAnimationFrame(this.raf);
     this.clear();
     this.renderer?.dispose();
+    if (this.orbitControls) {
+      this.orbitControls.dispose();
+      this.orbitControls = null;
+    }
     if (this.directionalLight) {
       this.scene.remove(this.directionalLight);
       this.scene.remove(this.directionalLight.target);
@@ -384,7 +394,18 @@ export class Viewport {
    * @returns {void}
    */
   rotateHorizontally(deltaX: number): void {
-    if (!this.camera) return;
+    if (!this.camera) {
+      return;
+    }
+
+    if (this.orbitControls) {
+      const deltaAngle = -deltaX * this.rotationSensitivity;
+      this.orbitControls.rotateLeft(deltaAngle);
+      this.orbitControls.update();
+      this.target.copy(this.orbitControls.target);
+      this.updateDirectionalLight();
+      return;
+    }
     if (this.orbitRadius === 0) return;
 
     const deltaAngle = -deltaX * this.rotationSensitivity;
@@ -530,6 +551,56 @@ export class Viewport {
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this.target);
     this.updateDirectionalLight();
+  }
+
+  /**
+   * Активирует OrbitControls для текущей камеры, если доступен DOM-элемент рендерера.
+   * @returns {OrbitControls | null} Возвращает созданный контроллер либо null, если создать не удалось.
+   */
+  enableOrbitControls(): OrbitControls | null {
+    if (!this.camera || !this.renderer) {
+      return null;
+    }
+
+    if (this.orbitControls) {
+      return this.orbitControls;
+    }
+
+    const domElement = this.renderer.domElement;
+
+    if (!domElement || typeof domElement.addEventListener !== "function") {
+      return null;
+    }
+
+    const controls = new OrbitControls(this.camera, domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.enablePan = false;
+    controls.enableZoom = false;
+    controls.target.copy(this.target);
+    controls.addEventListener("change", () => {
+      this.target.copy(controls.target);
+      this.updateDirectionalLight();
+    });
+    controls.update();
+
+    this.orbitControls = controls;
+
+    return controls;
+  }
+
+  /**
+   * Отключает активный OrbitControls и возвращает управление вручную настраиваемой орбите.
+   * @returns {void}
+   */
+  disableOrbitControls(): void {
+    if (!this.orbitControls) {
+      return;
+    }
+
+    this.orbitControls.dispose();
+    this.orbitControls = null;
+    this.updateCameraPositionFromOrbit();
   }
 
   /**

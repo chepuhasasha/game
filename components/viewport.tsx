@@ -6,6 +6,7 @@ import {
   PanResponder,
   PanResponderGestureState,
   PanResponderInstance,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -448,6 +449,7 @@ export const ViewPort = ({
   const ringRadiiRef = useRef<RingRadii | null>(null);
   const restZoomRef = useRef<number>(DEFAULT_CAMERA_ZOOM);
   const [layout, setLayout] = useState<LayoutSize>({ width: 0, height: 0 });
+  const isOrbitControlsSupported = Platform.OS === "web";
   const { handleRotationStep } = useRotationFeedback({
     isSoundEnabled,
     isVibrationEnabled,
@@ -532,8 +534,11 @@ export const ViewPort = ({
       instance.setRotationStepFeedback(ROTATION_STEP_ANGLE, handleRotationStep);
       ringRadiiRef.current = populateViewportContent(instance);
       restZoomRef.current = instance.getZoom();
+      if (isOrbitControlsSupported) {
+        instance.enableOrbitControls();
+      }
     },
-    [handleRotationStep, restZoomRef]
+    [handleRotationStep, isOrbitControlsSupported, restZoomRef]
   );
 
   /**
@@ -550,7 +555,7 @@ export const ViewPort = ({
     <View style={styles.container}>
       <View onLayout={handleLayout} style={styles.sceneContainer}>
         <GLView style={styles.glView} onContextCreate={handleContextCreate} />
-        {layout.width > 0 && layout.height > 0 ? (
+        {layout.width > 0 && layout.height > 0 && !isOrbitControlsSupported ? (
           <View pointerEvents="box-none" style={styles.overlay}>
             <View {...panResponder.panHandlers} style={styles.rotationRing} />
           </View>
