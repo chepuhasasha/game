@@ -10,6 +10,11 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
+
 import { EventName, type Extension, type FX } from "./types";
 
 type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
@@ -23,6 +28,10 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   private target = new Vector3(0, 0, 0);
 
   private readonly fxStore: Record<string, FX<unknown[]>> = {};
+
+  private composer: EffectComposer | null = null;
+  private renderPass: RenderPass | null = null;
+  private outputPass: OutputPass | null = null;
 
   private events: { [K in EventName]: ((data: unknown) => void)[] } = {
     [EventName.ROTATION_STEP]: [],
@@ -118,8 +127,13 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   private loop = (t = 0): void => {
     this.emit(EventName.LOOP, t);
     const effects = Object.values(this.fxStore);
-    if (effects.length > 0) {
+    if (this.composer) {
+      if (this.renderPass) {
+        this.renderPass.camera = this.camera;
+        this.renderPass.scene = this.scene;
+      }
       effects.forEach((fx) => fx.render());
+      this.composer.render();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
@@ -230,9 +244,55 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     name: Name,
     fx: Effect
   ): Viewport<TFx & Record<Name, Effect>> {
+    this.ensureComposer();
+    const pass = fx.setup(
+      this.renderer,
+      this.scene,
+      this.camera,
+      this.composer as EffectComposer
+    );
+    this.insertPass(pass);
     fx.setSize(this.size.width, this.size.height);
     this.fxStore[name] = fx;
 
     return this as unknown as Viewport<TFx & Record<Name, Effect>>;
+  }
+
+  /**
+   * Гарантирует наличие общего композера пост-эффектов.
+   * @returns {void}
+   */
+  private ensureComposer(): void {
+    if (this.composer) {
+      return;
+    }
+
+    this.composer = new EffectComposer(this.renderer);
+    this.renderPass = new RenderPass(this.scene, this.camera);
+    this.outputPass = new OutputPass();
+
+    this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.outputPass);
+    this.composer.setSize(this.size.width, this.size.height);
+  }
+
+  /**
+   * Вставляет новый проход перед выходным проходом композера.
+   * @param {Pass} pass Экземпляр прохода, добавляемого в цепочку.
+   * @returns {void}
+   */
+  private insertPass(pass: Pass): void {
+    if (!this.composer || !this.outputPass) {
+      return;
+    }
+
+    const passes = this.composer.passes;
+    const index = passes.indexOf(this.outputPass);
+
+    if (index === -1) {
+      this.composer.addPass(pass);
+    } else {
+      passes.splice(index, 0, pass);
+    }
   }
 }

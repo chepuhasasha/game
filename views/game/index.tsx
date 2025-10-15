@@ -1,6 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Container, Viewport } from "./core";
+import { BlackoutFX, Container, HeatHazeFX, Viewport } from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -29,13 +29,14 @@ export const Game = ({
       const instance = baseViewport
         .init()
         .useFX(
-          "blackout",
-          new BlackoutFX(
-            baseViewport.renderer,
-            baseViewport.scene,
-            baseViewport.camera
-          )
+          "heatHaze",
+          new HeatHazeFX({
+            intensity: 0.75,
+            distortion: 0.035,
+            shimmer: 0.5,
+          })
         )
+        .useFX("blackout", new BlackoutFX())
         .add(container)
         .render();
 
@@ -43,6 +44,8 @@ export const Game = ({
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
+      instance.fx.heatHaze.enable();
+      instance.fx.heatHaze.play(0.85, 1500);
     },
     []
   );
