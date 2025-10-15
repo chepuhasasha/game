@@ -4,7 +4,7 @@ import type { GameObject } from "../types";
 export class Container extends Mesh implements GameObject {
   constructor(public readonly grid: number, public readonly size: number) {
     super(
-      new BoxGeometry(1, 1, 1),
+      new BoxGeometry(size, size, size),
       new MeshStandardMaterial({ color: 0xff0000 })
     );
     this.position.set(0, 0, 0);

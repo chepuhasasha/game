@@ -21,7 +21,7 @@ export const Game = ({
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
-      const container = new Container(6, 2);
+      const container = new Container(6, 4);
 
       const instance = new Viewport(gl)
         .init()
@@ -38,6 +38,8 @@ export const Game = ({
         .render();
 
       viewport.current = instance;
+
+      instance.fitToObject(container);
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");

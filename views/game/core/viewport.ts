@@ -4,6 +4,7 @@ import {
   AmbientLight,
   Color,
   DirectionalLight,
+  Mesh,
   Object3D,
   OrthographicCamera,
   Scene,
@@ -294,5 +295,9 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     } else {
       passes.splice(index, 0, pass);
     }
+  }
+
+  fitToObject(obj: Mesh, margin = 0.1) {
+    // ...
   }
 }
