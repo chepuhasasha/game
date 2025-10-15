@@ -1,13 +1,8 @@
 import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import type { GameObject } from "../types";
 
-export interface ContainerOptions {
-  grid: number;
-  size: number;
-}
-
 export class Container extends Mesh implements GameObject {
-  constructor(options: ContainerOptions) {
+  constructor(public readonly grid: number, public readonly size: number) {
     super(
       new BoxGeometry(1, 1, 1),
       new MeshStandardMaterial({ color: 0xff0000 })
