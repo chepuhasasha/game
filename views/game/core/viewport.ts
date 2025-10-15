@@ -15,10 +15,10 @@ import { EventName, type Extension, type FX } from "./types";
 type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
 
 export class Viewport<TFx extends FXRegistry = FXRegistry> {
-  readonly scene: Scene = new Scene();
-  readonly renderer!: WebGLRenderer;
-  readonly camera!: OrthographicCamera;
-  readonly light!: DirectionalLight;
+  scene: Scene = new Scene();
+  renderer!: WebGLRenderer;
+  camera!: OrthographicCamera;
+  light!: DirectionalLight;
 
   private target = new Vector3(0, 0, 0);
 
