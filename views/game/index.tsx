@@ -29,26 +29,14 @@ export const Game = ({
       const instance = baseViewport
         .init()
         .useFX(
-          "blackout",
-          new BlackoutFX(
-            baseViewport.renderer,
-            baseViewport.scene,
-            baseViewport.camera
-          )
-        )
-        .useFX(
           "heatHaze",
-          new HeatHazeFX(
-            baseViewport.renderer,
-            baseViewport.scene,
-            baseViewport.camera,
-            {
-              intensity: 0.75,
-              distortion: 0.035,
-              shimmer: 0.5,
-            }
-          )
+          new HeatHazeFX({
+            intensity: 0.75,
+            distortion: 0.035,
+            shimmer: 0.5,
+          })
         )
+        .useFX("blackout", new BlackoutFX())
         .add(container)
         .render();
 

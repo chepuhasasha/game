@@ -67,46 +67,42 @@ float snoise(vec2 v) {
 
 void main() {
     float animatedTime = time * speed;
-    vec2 flowUv = vUv * noiseScale + vec2(animatedTime * 0.35, animatedTime * 0.21);
+    vec2 flowUv = vUv * noiseScale + vec2(animatedTime * 0.32, animatedTime * 0.18);
     float baseNoise = snoise(flowUv);
     float heatMask = smoothstep(
         hotThreshold - hotSoftness,
         hotThreshold + hotSoftness,
         baseNoise
     );
+    heatMask = clamp(heatMask, 0.0, 1.0);
 
-    float detailNoise = snoise(flowUv * 2.5 + vec2(animatedTime * 1.7, animatedTime * 2.3));
+    float detailNoise = snoise(flowUv * 2.3 + vec2(animatedTime * 1.4, animatedTime * -1.6));
     float detailMask = detailNoise * 0.5 + 0.5;
 
-    float dx = snoise(flowUv + vec2(0.02, 0.0)) - baseNoise;
-    float dy = snoise(flowUv + vec2(0.0, 0.02)) - baseNoise;
-    vec2 refraction = vec2(dx, dy);
+    vec2 gradient = vec2(
+        snoise(flowUv + vec2(0.08, 0.0)) - baseNoise,
+        snoise(flowUv + vec2(0.0, 0.08)) - baseNoise
+    );
+    vec2 refraction = gradient * distortion;
 
-    float shimmerOffset = (detailMask - 0.5) * shimmer * 0.01;
-    vec2 shimmerUv = vUv + vec2(shimmerOffset);
+    vec2 shimmerOffset = (detailMask - 0.5) * shimmer * intensity * 0.004 * vec2(1.0, -1.0);
 
-    vec2 distortedUv = vUv + refraction * distortion * intensity;
-    distortedUv += (detailMask - 0.5) * distortion * 0.25 * intensity;
-    distortedUv = mix(vUv, distortedUv, heatMask);
+    vec2 distortedUv = vUv + refraction * intensity;
+    distortedUv = mix(vUv, distortedUv, heatMask * intensity);
+    vec2 finalUv = distortedUv + shimmerOffset;
+    vec2 safeUv = clamp(finalUv, 0.001, 0.999);
 
-    vec3 refractedColor = texture2D(tDiffuse, distortedUv + shimmerUv * 0.1).rgb;
+    vec3 refractedColor = texture2D(tDiffuse, safeUv).rgb;
 
-    vec2 blurDir1 = vec2(0.0015, 0.0015);
-    vec2 blurDir2 = vec2(-0.0015, 0.0015);
+    vec2 blurStep = vec2(0.0015, 0.0);
     vec3 blurredColor = refractedColor * 0.4;
-    blurredColor += texture2D(tDiffuse, distortedUv + blurDir1).rgb * 0.2;
-    blurredColor += texture2D(tDiffuse, distortedUv - blurDir1).rgb * 0.2;
-    blurredColor += texture2D(tDiffuse, distortedUv + blurDir2).rgb * 0.1;
-    blurredColor += texture2D(tDiffuse, distortedUv - blurDir2).rgb * 0.1;
+    blurredColor += texture2D(tDiffuse, clamp(safeUv + blurStep, 0.001, 0.999)).rgb * 0.15;
+    blurredColor += texture2D(tDiffuse, clamp(safeUv - blurStep, 0.001, 0.999)).rgb * 0.15;
+    blurredColor += texture2D(tDiffuse, clamp(safeUv + blurStep.yx, 0.001, 0.999)).rgb * 0.15;
+    blurredColor += texture2D(tDiffuse, clamp(safeUv - blurStep.yx, 0.001, 0.999)).rgb * 0.15;
 
     float blurAmount = clamp(blurStrength * intensity, 0.0, 1.0) * heatMask;
     vec3 hazyColor = mix(refractedColor, blurredColor, blurAmount);
 
-    float shimmerAmount = (detailMask - 0.5) * 0.15 * shimmer * intensity;
-    hazyColor += shimmerAmount;
-
-    vec3 originalColor = texture2D(tDiffuse, vUv).rgb;
-    vec3 finalColor = mix(originalColor, hazyColor, heatMask * intensity);
-
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(hazyColor, 1.0);
 }

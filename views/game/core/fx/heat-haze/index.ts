@@ -1,8 +1,8 @@
-import { Camera, NoBlending, Scene, WebGLRenderer } from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { NoBlending } from "three";
+import type { Camera, Scene, WebGLRenderer } from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
 import fragmentShader from "./fragment.glsl";
 import vertexShader from "./vertex.glsl";
@@ -21,27 +21,17 @@ export interface HeatHazeFXOptions {
 }
 
 export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
-  composer: EffectComposer;
-  renderPass: RenderPass;
-  fxPass: ShaderPass;
-  outputPass: OutputPass;
+  composer: EffectComposer | null = null;
+  fxPass: ShaderPass | null = null;
 
   private startTime = performance.now();
   private animation: { raf: number; cancel: () => void } | null = null;
 
   /**
-   * Создаёт эффект теплового миража с локальной рефракцией и мерцанием.
-   * @param {WebGLRenderer} renderer Активный рендерер трёхмерной сцены.
-   * @param {Scene} scene Сцена, к которой применяется эффект.
-   * @param {Camera} camera Камера сцены.
+   * Создаёт эффект теплового миража с настройками интенсивности и шума.
    * @param {Partial<HeatHazeFXOptions>} [options] Дополнительные параметры интенсивности.
    */
-  constructor(
-    renderer: WebGLRenderer,
-    scene: Scene,
-    camera: Camera,
-    options: Partial<HeatHazeFXOptions> = {}
-  ) {
+  constructor(options: Partial<HeatHazeFXOptions> = {}) {
     const {
       intensity = 0.6,
       distortion = 0.03,
@@ -53,8 +43,6 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
       hotSoftness = 0.55,
     } = options;
 
-    this.composer = new EffectComposer(renderer);
-    this.renderPass = new RenderPass(scene, camera);
     this.fxPass = new ShaderPass({
       uniforms: {
         tDiffuse: { value: null },
@@ -75,23 +63,44 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
     this.fxPass.material.toneMapped = false;
     this.fxPass.material.depthTest = false;
     this.fxPass.material.blending = NoBlending;
-    this.outputPass = new OutputPass();
+  }
 
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(this.fxPass);
-    this.composer.addPass(this.outputPass);
+  /**
+   * Регистрирует шейдерный проход в композере пост-обработки.
+   * @param {WebGLRenderer} renderer Активный рендерер сцены.
+   * @param {Scene} scene Сцена, над которой выполняется эффект.
+   * @param {Camera} camera Камера сцены.
+   * @param {EffectComposer} composer Общий композер пост-обработки.
+   * @returns {Pass} Регистрируемый проход пост-обработки.
+   */
+  setup(
+    _renderer: WebGLRenderer,
+    _scene: Scene,
+    _camera: Camera,
+    composer: EffectComposer
+  ): Pass {
+    this.composer = composer;
+    if (!this.fxPass) {
+      throw new Error("Проход эффекта теплового миража не инициализирован.");
+    }
 
     this.disable();
+
+    return this.fxPass;
   }
 
   /** Включает пост-эффект. */
   enable(): void {
-    this.fxPass.enabled = true;
+    if (this.fxPass) {
+      this.fxPass.enabled = true;
+    }
   }
 
   /** Отключает пост-эффект. */
   disable(): void {
-    this.fxPass.enabled = false;
+    if (this.fxPass) {
+      this.fxPass.enabled = false;
+    }
   }
 
   /**
@@ -107,9 +116,12 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
 
   /** Выполняет отрисовку эффекта. */
   render(): void {
+    if (!this.fxPass) {
+      return;
+    }
+
     const elapsed = (performance.now() - this.startTime) / 1000;
     this.fxPass.uniforms.time.value = elapsed;
-    this.composer.render();
   }
 
   /**
@@ -118,7 +130,7 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
    * @param {number} height Высота области вывода.
    */
   setSize(width: number, height: number): void {
-    this.composer.setSize(width, height);
+    this.composer?.setSize(width, height);
   }
 
   /**
@@ -126,6 +138,9 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
    * @param {number} value Значение интенсивности.
    */
   private setIntensity(value: number): void {
+    if (!this.fxPass) {
+      return;
+    }
     this.fxPass.uniforms.intensity.value = Math.max(0, value);
   }
 
@@ -136,6 +151,10 @@ export class HeatHazeFX implements FX<[target?: number, duration?: number]> {
    * @returns {Promise<void>} Промис, выполняющийся после завершения анимации.
    */
   private animateIntensity(to: number, ms: number): Promise<void> {
+    if (!this.fxPass) {
+      return Promise.resolve();
+    }
+
     const from = Number(this.fxPass.uniforms.intensity.value) || 0;
 
     if (ms <= 0 || Math.abs(to - from) < 1e-6) {
