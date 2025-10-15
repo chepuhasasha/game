@@ -2,8 +2,6 @@ import type { Camera, Scene, WebGLRenderer } from "three";
 import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
-import type { Viewport } from "./viewport";
-
 export interface GameObject {
   /**
    * Вызывается каждый кадр.
@@ -48,16 +46,10 @@ export interface FX<TPlayArgs extends unknown[] = unknown[]> {
   setSize(width: number, height: number): void;
 }
 
-export interface Extension<V extends Viewport<any> = Viewport<any>> {
+export interface Extension<V = unknown> {
   /**
    * Настраивает или регистрирует расширение на переданном вьюпорте.
    * @param {V} viewport Экземпляр вьюпорта, с которым работает расширение.
    */
   setup(viewport: V): void;
-}
-
-export enum EventName {
-  INIT = "INIT",
-  LOOP = "LOOP",
-  ROTATION_STEP = "ROTATION_STEP",
 }

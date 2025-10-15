@@ -1,298 +1,243 @@
 import type { ExpoWebGLRenderingContext } from "expo-gl";
-import { Renderer } from "expo-three";
-import {
-  AmbientLight,
-  Color,
-  DirectionalLight,
-  Object3D,
-  OrthographicCamera,
-  Scene,
-  Vector3,
-  WebGLRenderer,
-} from "three";
+import type { Camera, OrthographicCamera, Scene, WebGLRenderer } from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
-import { EventName, type Extension, type FX } from "./types";
+import { Viewport as CoreViewport } from "../../../core";
+import type { Extension, FX } from "./types";
 
 type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
 
-export class Viewport<TFx extends FXRegistry = FXRegistry> {
-  scene: Scene = new Scene();
-  renderer!: WebGLRenderer;
-  camera!: OrthographicCamera;
-  light!: DirectionalLight;
+type ViewportInternals = CoreViewport & {
+  renderer?: WebGLRenderer;
+  scene?: Scene;
+  camera?: OrthographicCamera;
+  gl?: ExpoWebGLRenderingContext;
+};
 
-  private target = new Vector3(0, 0, 0);
+interface FXState {
+  fxStore: Record<string, FX<unknown[]>>;
+  composer: EffectComposer | null;
+  renderPass: RenderPass | null;
+  outputPass: OutputPass | null;
+  originalRender: ((scene: Scene, camera: Camera) => void) | null;
+}
 
-  private readonly fxStore: Record<string, FX<unknown[]>> = {};
-
-  private composer: EffectComposer | null = null;
-  private renderPass: RenderPass | null = null;
-  private outputPass: OutputPass | null = null;
-
-  private events: { [K in EventName]: ((data: unknown) => void)[] } = {
-    [EventName.ROTATION_STEP]: [],
-    [EventName.INIT]: [],
-    [EventName.LOOP]: [],
-  };
-
-  /**
-   * Создаёт экземпляр вьюпорта для работы с WebGL-контекстом.
-   * @param {ExpoWebGLRenderingContext} gl Графический контекст Expo.
-   */
-  constructor(private readonly gl: ExpoWebGLRenderingContext) {}
-
-  /**
-   * Инициализирует основные сущности сцены: камеру, рендерер и освещение.
-   * @returns {this} Возвращает текущий экземпляр для чейнинга.
-   */
-  init(): this {
-    const { width, height } = this.size;
-    this.scene.background = new Color(0x000000);
-
-    this.initCamera(width, height);
-    this.initRenderer(width, height);
-    this.initLight(this.camera.position);
-
-    this.emit(EventName.INIT);
-
-    return this;
-  }
-
-  /**
-   * Возвращает зарегистрированные эффекты с сохранением типов.
-   * @returns {TFx} Коллекция эффектов, доступных вьюпорту.
-   */
-  get fx(): TFx {
-    return this.fxStore as TFx;
-  }
-
-  /**
-   * Настраивает ортографическую камеру на основе размеров сцены.
-   * @param {number} width Текущая ширина сцены.
-   * @param {number} height Текущая высота сцены.
-   */
-  private initCamera(width: number, height: number): void {
-    const aspect = width / height;
-    const half = 6 / 2;
-    this.camera = new OrthographicCamera(
-      -half * aspect,
-      half * aspect,
-      half,
-      -half,
-      0.1,
-      1000
-    );
-    this.camera.updateProjectionMatrix();
-    this.camera.position.set(5, 4, 5);
-    this.camera.lookAt(this.target);
-    this.scene.add(this.camera);
-  }
-
-  /**
-   * Создаёт и настраивает рендерер для текущего контекста.
-   * @param {number} width Ширина буфера рендеринга.
-   * @param {number} height Высота буфера рендеринга.
-   */
-  private initRenderer(width: number, height: number): void {
-    this.renderer = new Renderer({
-      gl: this.gl,
-      width,
-      height,
-      antialias: true,
-      pixelRatio: 1,
-    });
-  }
-
-  /**
-   * Подготавливает источники освещения сцены.
-   * @param {Vector3} position Позиция основного источника света.
-   */
-  private initLight(position: Vector3): void {
-    this.light = new DirectionalLight(0xffffff, 1);
-    this.light.position.copy(position);
-    this.light.target.position.copy(this.target);
-    this.scene.add(new AmbientLight(0xffffff, 1));
-    this.scene.add(this.light);
-    this.scene.add(this.light.target);
-  }
-
-  /**
-   * Основной цикл рендеринга, запускаемый на каждом кадре.
-   * @param {number} [t=0] Текущее время анимации.
-   */
-  private loop = (t = 0): void => {
-    this.emit(EventName.LOOP, t);
-    const effects = Object.values(this.fxStore);
-    if (this.composer) {
-      if (this.renderPass) {
-        this.renderPass.camera = this.camera;
-        this.renderPass.scene = this.scene;
-      }
-      effects.forEach((fx) => fx.render());
-      this.composer.render();
-    } else {
-      this.renderer.render(this.scene, this.camera);
-    }
-    this.gl.endFrameEXP();
-  };
-
-  /**
-   * Запускает цикл рендеринга.
-   * @returns {this} Возвращает текущий экземпляр для чейнинга.
-   */
-  render(): this {
-    this.renderer.setAnimationLoop(this.loop);
-    return this;
-  }
-
-  /**
-   * Добавляет один или несколько объектов на сцену.
-   * @param {Object3D | Object3D[]} obj Объект либо список объектов Three.js.
-   * @returns {this} Возвращает текущий экземпляр для чейнинга.
-   */
-  add(obj: Object3D[] | Object3D): this {
-    if (Array.isArray(obj)) {
-      this.scene.add(...obj);
-    } else {
-      this.scene.add(obj);
-    }
-    return this;
-  }
-
-  /**
-   * Удаляет объект со сцены и вызывает его dispose при наличии.
-   * @param {Object3D} obj Удаляемый объект сцены.
-   */
-  remove(obj: Object3D): void {
-    this.scene.remove(obj);
-    const disposable = obj as unknown as { dispose?: () => void };
-    if (typeof disposable.dispose === "function") disposable.dispose();
-  }
-
-  /** Удаляет все вспомогательные объекты со сцены, кроме камеры и света. */
-  clear(): void {
-    const keep = new Set<Object3D>([this.camera]);
-    const toRemove: Object3D[] = [];
-    this.scene.children.forEach((child) => {
-      if (
-        !keep.has(child) &&
-        !(child instanceof AmbientLight) &&
-        !(child instanceof DirectionalLight)
-      ) {
-        toRemove.push(child);
-      }
-    });
-    toRemove.forEach((o) => this.remove(o));
-  }
-
-  /**
-   * Отправляет событие подписчикам внутри вьюпорта.
-   * @param {EventName} event Имя события.
-   * @param {unknown} [data] Дополнительные данные события.
-   */
-  private emit(event: EventName, data?: unknown): void {
-    if (this.events[event]) {
-      this.events[event].forEach((cb) => cb(data));
-    }
-  }
-
-  /**
-   * Подписывает обработчик на событие вьюпорта.
-   * @param {EventName} event Имя события.
-   * @param {(data: unknown) => void} cb Обработчик события.
-   * @returns {this} Возвращает текущий экземпляр для чейнинга.
-   */
-  on(event: EventName, cb: (data: unknown) => void): this {
-    if (this.events[event]) {
-      this.events[event].push(cb);
-    } else {
-      throw new Error("Недопустимое название события.");
-    }
-    return this;
-  }
-
-  /**
-   * Возвращает актуальные размеры буфера рендеринга.
-   * @returns {{ width: number; height: number }} Параметры размера сцены.
-   */
-  get size(): { width: number; height: number } {
-    const { drawingBufferWidth: width, drawingBufferHeight: height } = this.gl;
-    return { width, height };
-  }
-
-  /**
-   * Подключает расширение к текущему вьюпорту.
-   * @param {Extension<Viewport<TFx>>} extension Экземпляр расширения.
-   * @returns {this} Возвращает текущий экземпляр для чейнинга.
-   */
-  use(extension: Extension<Viewport<TFx>>): this {
-    extension.setup(this);
-    return this;
-  }
-
-  /**
-   * Регистрирует пост-обработку и сохраняет её тип для автодополнения.
-   * @param {Name} name Уникальное имя эффекта.
-   * @param {Effect} fx Экземпляр эффекта.
-   * @returns {Viewport<TFx & Record<Name, Effect>>} Вьюпорт с учётом нового эффекта.
-   */
+export type ViewportWithFX<TFx extends FXRegistry = FXRegistry> = CoreViewport & {
+  readonly fx: TFx;
   useFX<Name extends string, Effect extends FX<unknown[]>>(
     name: Name,
     fx: Effect
-  ): Viewport<TFx & Record<Name, Effect>> {
-    this.ensureComposer();
-    const pass = fx.setup(
-      this.renderer,
-      this.scene,
-      this.camera,
-      this.composer as EffectComposer
+  ): ViewportWithFX<TFx & Record<Name, Effect>>;
+};
+
+const augmentedViewports = new WeakSet<CoreViewport>();
+const fxStates = new WeakMap<CoreViewport, FXState>();
+
+const getInternals = (viewport: CoreViewport): Required<ViewportInternals> => {
+  const internals = viewport as ViewportInternals;
+  if (!internals.renderer || !internals.scene || !internals.camera || !internals.gl) {
+    throw new Error(
+      "Вьюпорт должен быть инициализирован до подключения FX-расширения."
     );
-    this.insertPass(pass);
-    fx.setSize(this.size.width, this.size.height);
-    this.fxStore[name] = fx;
-
-    return this as unknown as Viewport<TFx & Record<Name, Effect>>;
   }
+  return internals as Required<ViewportInternals>;
+};
 
+/**
+ * Расширение, добавляющее поддержку пост-эффектов к игровому вьюпорту.
+ */
+export class ViewportFXExtension implements Extension<CoreViewport> {
   /**
-   * Гарантирует наличие общего композера пост-эффектов.
+   * Подключает расширение к переданному вьюпорту, добавляя методы работы с FX.
+   * @param {CoreViewport} viewport Экземпляр базового вьюпорта.
    * @returns {void}
    */
-  private ensureComposer(): void {
-    if (this.composer) {
+  setup(viewport: CoreViewport): void {
+    if (augmentedViewports.has(viewport)) {
       return;
     }
 
-    this.composer = new EffectComposer(this.renderer);
-    this.renderPass = new RenderPass(this.scene, this.camera);
-    this.outputPass = new OutputPass();
+    const state: FXState = {
+      fxStore: {},
+      composer: null,
+      renderPass: null,
+      outputPass: null,
+      originalRender: null,
+    };
 
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(this.outputPass);
-    this.composer.setSize(this.size.width, this.size.height);
+    fxStates.set(viewport, state);
+    this.defineFXGetter(viewport);
+    this.defineUseFX(viewport);
+
+    augmentedViewports.add(viewport);
   }
 
   /**
-   * Вставляет новый проход перед выходным проходом композера.
-   * @param {Pass} pass Экземпляр прохода, добавляемого в цепочку.
+   * Возвращает состояние FX для указанного вьюпорта.
+   * @param {CoreViewport} viewport Вьюпорт, для которого требуется состояние.
+   * @returns {FXState} Хранимое состояние FX.
+   */
+  private getState(viewport: CoreViewport): FXState {
+    const state = fxStates.get(viewport);
+    if (!state) {
+      throw new Error("FX-состояние для данного вьюпорта не найдено.");
+    }
+    return state;
+  }
+
+  /**
+   * Создаёт геттер для доступа к зарегистрированным эффектам.
+   * @param {CoreViewport} viewport Вьюпорт, в который добавляется свойство.
    * @returns {void}
    */
-  private insertPass(pass: Pass): void {
-    if (!this.composer || !this.outputPass) {
+  private defineFXGetter(viewport: CoreViewport): void {
+    Object.defineProperty(viewport, "fx", {
+      get: () => this.getState(viewport).fxStore,
+    });
+  }
+
+  /**
+   * Добавляет метод useFX для регистрации эффектов на вьюпорте.
+   * @param {CoreViewport} viewport Вьюпорт, который нужно дополнить методом.
+   * @returns {void}
+   */
+  private defineUseFX(viewport: CoreViewport): void {
+    const extension = this;
+    (viewport as ViewportWithFX).useFX = function useFX<Name extends string, Effect extends FX<unknown[]>>(
+      this: ViewportWithFX,
+      name: Name,
+      fx: Effect
+    ): ViewportWithFX {
+      const state = extension.getState(this);
+      extension.ensureComposer(this, state);
+      extension.ensurePatchedRender(this, state);
+      const internals = getInternals(this);
+      const pass = fx.setup(
+        internals.renderer,
+        internals.scene,
+        internals.camera,
+        state.composer as EffectComposer
+      );
+      extension.insertPass(state, pass);
+      fx.setSize(
+        internals.gl.drawingBufferWidth,
+        internals.gl.drawingBufferHeight
+      );
+      state.fxStore[name] = fx;
+      return this as ViewportWithFX;
+    } as ViewportWithFX["useFX"];
+  }
+
+  /**
+   * Обеспечивает наличие общего композера пост-эффектов для вьюпорта.
+   * @param {CoreViewport} viewport Вьюпорт, для которого создаётся композер.
+   * @param {FXState} state Состояние, содержащее ссылки на эффекты.
+   * @returns {void}
+   */
+  private ensureComposer(viewport: CoreViewport, state: FXState): void {
+    if (state.composer) {
       return;
     }
 
-    const passes = this.composer.passes;
-    const index = passes.indexOf(this.outputPass);
+    const internals = getInternals(viewport);
+    const composer = new EffectComposer(internals.renderer);
+    const renderPass = new RenderPass(internals.scene, internals.camera);
+    const outputPass = new OutputPass();
+
+    composer.addPass(renderPass);
+    composer.addPass(outputPass);
+    composer.setSize(
+      internals.gl.drawingBufferWidth,
+      internals.gl.drawingBufferHeight
+    );
+
+    state.composer = composer;
+    state.renderPass = renderPass;
+    state.outputPass = outputPass;
+  }
+
+  /**
+   * Переопределяет метод рендеринга, чтобы учитывать цепочку пост-эффектов.
+   * @param {CoreViewport} viewport Вьюпорт, рендер которого необходимо расширить.
+   * @param {FXState} state Состояние FX, содержащее ссылки на композер и эффекты.
+   * @returns {void}
+   */
+  private ensurePatchedRender(viewport: CoreViewport, state: FXState): void {
+    if (state.originalRender) {
+      return;
+    }
+
+    const internals = getInternals(viewport);
+    const renderer = internals.renderer;
+    state.originalRender = renderer.render.bind(renderer);
+
+    renderer.render = ((scene: Scene, camera: Camera) => {
+      if (state.composer && state.renderPass) {
+        state.renderPass.scene = scene;
+        state.renderPass.camera = camera;
+        Object.values(state.fxStore).forEach((fx) => fx.render());
+        state.composer.render();
+        return;
+      }
+
+      state.originalRender?.(scene, camera);
+    }) as typeof renderer.render;
+  }
+
+  /**
+   * Вставляет проход пост-обработки перед выходным проходом композера.
+   * @param {FXState} state Состояние FX вьюпорта.
+   * @param {Pass} pass Добавляемый проход пост-обработки.
+   * @returns {void}
+   */
+  private insertPass(state: FXState, pass: Pass): void {
+    if (!state.composer || !state.outputPass) {
+      return;
+    }
+
+    const passes = state.composer.passes;
+    const index = passes.indexOf(state.outputPass);
 
     if (index === -1) {
-      this.composer.addPass(pass);
+      state.composer.addPass(pass);
     } else {
       passes.splice(index, 0, pass);
     }
   }
 }
+
+const defaultExtension = new ViewportFXExtension();
+
+/**
+ * Применяет FX-расширение к существующему вьюпорту.
+ * @param {CoreViewport} viewport Базовый вьюпорт, который требуется дополнить FX.
+ * @param {ViewportFXExtension} [extension=defaultExtension] Экземпляр расширения FX.
+ * @returns {ViewportWithFX} Вьюпорт с подключёнными возможностями FX.
+ */
+export const applyViewportFX = <TViewport extends CoreViewport>(
+  viewport: TViewport,
+  extension: ViewportFXExtension = defaultExtension
+): ViewportWithFX => {
+  extension.setup(viewport);
+  return viewport as ViewportWithFX;
+};
+
+/**
+ * Создаёт вьюпорт и сразу подключает к нему FX-расширение.
+ * @param {ExpoWebGLRenderingContext} gl Контекст WebGL, предоставленный Expo.
+ * @param {ViewportFXExtension} [extension=defaultExtension] Экземпляр расширения FX.
+ * @returns {ViewportWithFX} Инициализированный вьюпорт с поддержкой пост-эффектов.
+ */
+export const createGameViewport = (
+  gl: ExpoWebGLRenderingContext,
+  extension: ViewportFXExtension = defaultExtension
+): ViewportWithFX => {
+  const viewport = new CoreViewport(gl);
+  extension.setup(viewport);
+  return viewport as ViewportWithFX;
+};
+
+export type { FXRegistry };

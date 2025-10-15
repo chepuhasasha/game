@@ -1,6 +1,12 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Container, HeatHazeFX, Viewport } from "./core";
+import {
+  BlackoutFX,
+  Container,
+  HeatHazeFX,
+  createGameViewport,
+  type ViewportWithFX,
+} from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -17,7 +23,7 @@ export const Game = ({
   isSoundEnabled,
   isVibrationEnabled,
 }: GameProps): JSX.Element => {
-  const viewport = useRef<Viewport | null>(null);
+  const viewport = useRef<ViewportWithFX | null>(null);
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
@@ -26,26 +32,29 @@ export const Game = ({
         size: 2,
       });
 
-      const instance = new Viewport(gl)
-        .init()
-        .useFX(
-          "heatHaze",
-          new HeatHazeFX({
-            intensity: 0.75,
-            distortion: 0.035,
-            shimmer: 0.5,
-          })
-        )
-        .useFX("blackout", new BlackoutFX())
-        .add(container)
-        .render();
+      const baseViewport = createGameViewport(gl);
+      baseViewport.init();
+      const viewportWithHeatHaze = baseViewport.useFX(
+        "heatHaze",
+        new HeatHazeFX({
+          intensity: 0.75,
+          distortion: 0.035,
+          shimmer: 0.5,
+        })
+      );
+      const viewportWithFX = viewportWithHeatHaze.useFX(
+        "blackout",
+        new BlackoutFX()
+      );
+      viewportWithFX.add(container);
+      viewportWithFX.render();
 
-      viewport.current = instance;
+      viewport.current = viewportWithFX;
 
-      instance.fx.blackout.enable();
-      instance.fx.blackout.play("show");
-      // instance.fx.heatHaze.enable();
-      // instance.fx.heatHaze.play(0.85, 1500);
+      viewportWithFX.fx.blackout.enable();
+      viewportWithFX.fx.blackout.play("show");
+      // viewportWithFX.fx.heatHaze.enable();
+      // viewportWithFX.fx.heatHaze.play(0.85, 1500);
     },
     []
   );
