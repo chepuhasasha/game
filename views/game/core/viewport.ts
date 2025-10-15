@@ -10,26 +10,42 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { EventName, Extension, FX } from "./types";
+import { EventName, type Extension, type FX } from "./types";
 
-export class Viewport {
-  readonly scene: Scene = new Scene();
-  readonly renderer!: WebGLRenderer;
-  readonly camera!: OrthographicCamera;
-  readonly light!: DirectionalLight;
+type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
+
+export class Viewport<TFx extends FXRegistry = FXRegistry> {
+  scene: Scene = new Scene();
+  renderer!: WebGLRenderer;
+  camera!: OrthographicCamera;
+  light!: DirectionalLight;
 
   private target = new Vector3(0, 0, 0);
 
-  public fx: { [name: string]: FX } = {};
+  private readonly fxStore: Record<string, FX<unknown[]>> = {};
 
+  private events: { [K in EventName]: ((data: unknown) => void)[] } = {
+    [EventName.ROTATION_STEP]: [],
+    [EventName.INIT]: [],
+    [EventName.LOOP]: [],
+  };
+
+  /**
+   * Создаёт экземпляр вьюпорта для работы с WebGL-контекстом.
+   * @param {ExpoWebGLRenderingContext} gl Графический контекст Expo.
+   */
   constructor(private readonly gl: ExpoWebGLRenderingContext) {}
 
-  init() {
+  /**
+   * Инициализирует основные сущности сцены: камеру, рендерер и освещение.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  init(): this {
     const { width, height } = this.size;
     this.scene.background = new Color(0x000000);
 
     this.initCamera(width, height);
-    this.initRanderer(width, height);
+    this.initRenderer(width, height);
     this.initLight(this.camera.position);
 
     this.emit(EventName.INIT);
@@ -37,7 +53,20 @@ export class Viewport {
     return this;
   }
 
-  private initCamera(width: number, height: number) {
+  /**
+   * Возвращает зарегистрированные эффекты с сохранением типов.
+   * @returns {TFx} Коллекция эффектов, доступных вьюпорту.
+   */
+  get fx(): TFx {
+    return this.fxStore as TFx;
+  }
+
+  /**
+   * Настраивает ортографическую камеру на основе размеров сцены.
+   * @param {number} width Текущая ширина сцены.
+   * @param {number} height Текущая высота сцены.
+   */
+  private initCamera(width: number, height: number): void {
     const aspect = width / height;
     const half = 6 / 2;
     this.camera = new OrthographicCamera(
@@ -53,7 +82,13 @@ export class Viewport {
     this.camera.lookAt(this.target);
     this.scene.add(this.camera);
   }
-  private initRanderer(width: number, height: number) {
+
+  /**
+   * Создаёт и настраивает рендерер для текущего контекста.
+   * @param {number} width Ширина буфера рендеринга.
+   * @param {number} height Высота буфера рендеринга.
+   */
+  private initRenderer(width: number, height: number): void {
     this.renderer = new Renderer({
       gl: this.gl,
       width,
@@ -62,7 +97,12 @@ export class Viewport {
       pixelRatio: 1,
     });
   }
-  private initLight(position: Vector3) {
+
+  /**
+   * Подготавливает источники освещения сцены.
+   * @param {Vector3} position Позиция основного источника света.
+   */
+  private initLight(position: Vector3): void {
     this.light = new DirectionalLight(0xffffff, 1);
     this.light.position.copy(position);
     this.light.target.position.copy(this.target);
@@ -71,9 +111,13 @@ export class Viewport {
     this.scene.add(this.light.target);
   }
 
+  /**
+   * Основной цикл рендеринга, запускаемый на каждом кадре.
+   * @param {number} [t=0] Текущее время анимации.
+   */
   private loop = (t = 0): void => {
     this.emit(EventName.LOOP, t);
-    const effects = Object.values(this.fx);
+    const effects = Object.values(this.fxStore);
     if (effects.length > 0) {
       effects.forEach((fx) => fx.render());
     } else {
@@ -82,12 +126,21 @@ export class Viewport {
     this.gl.endFrameEXP();
   };
 
-  render() {
+  /**
+   * Запускает цикл рендеринга.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  render(): this {
     this.renderer.setAnimationLoop(this.loop);
     return this;
   }
 
-  add(obj: Object3D[] | Object3D) {
+  /**
+   * Добавляет один или несколько объектов на сцену.
+   * @param {Object3D | Object3D[]} obj Объект либо список объектов Three.js.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  add(obj: Object3D[] | Object3D): this {
     if (Array.isArray(obj)) {
       this.scene.add(...obj);
     } else {
@@ -96,18 +149,23 @@ export class Viewport {
     return this;
   }
 
+  /**
+   * Удаляет объект со сцены и вызывает его dispose при наличии.
+   * @param {Object3D} obj Удаляемый объект сцены.
+   */
   remove(obj: Object3D): void {
     this.scene.remove(obj);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
   }
 
+  /** Удаляет все вспомогательные объекты со сцены, кроме камеры и света. */
   clear(): void {
-    const keep = new Set([this.camera]);
+    const keep = new Set<Object3D>([this.camera]);
     const toRemove: Object3D[] = [];
     this.scene.children.forEach((child) => {
       if (
-        !keep.has(child as any) &&
+        !keep.has(child) &&
         !(child instanceof AmbientLight) &&
         !(child instanceof DirectionalLight)
       ) {
@@ -117,39 +175,64 @@ export class Viewport {
     toRemove.forEach((o) => this.remove(o));
   }
 
-  private events: { [k in EventName]: ((data: any) => void)[] } = {
-    [EventName.ROTATION_STEP]: [],
-    [EventName.INIT]: [],
-    [EventName.LOOP]: [],
-  };
-  private emit(event: EventName, data?: any) {
+  /**
+   * Отправляет событие подписчикам внутри вьюпорта.
+   * @param {EventName} event Имя события.
+   * @param {unknown} [data] Дополнительные данные события.
+   */
+  private emit(event: EventName, data?: unknown): void {
     if (this.events[event]) {
       this.events[event].forEach((cb) => cb(data));
     }
   }
-  on(event: EventName, cb: (data: any) => void) {
+
+  /**
+   * Подписывает обработчик на событие вьюпорта.
+   * @param {EventName} event Имя события.
+   * @param {(data: unknown) => void} cb Обработчик события.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  on(event: EventName, cb: (data: unknown) => void): this {
     if (this.events[event]) {
       this.events[event].push(cb);
     } else {
-      throw "Недопустимое название события.";
+      throw new Error("Недопустимое название события.");
     }
     return this;
   }
 
+  /**
+   * Возвращает актуальные размеры буфера рендеринга.
+   * @returns {{ width: number; height: number }} Параметры размера сцены.
+   */
   get size(): { width: number; height: number } {
     const { drawingBufferWidth: width, drawingBufferHeight: height } = this.gl;
     return { width, height };
   }
 
-  use(ext: Extension) {
-    ext.setup(this);
+  /**
+   * Подключает расширение к текущему вьюпорту.
+   * @param {Extension<Viewport<TFx>>} extension Экземпляр расширения.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  use(extension: Extension<Viewport<TFx>>): this {
+    extension.setup(this);
     return this;
   }
 
-  useFX(name: string, fx: FX) {
+  /**
+   * Регистрирует пост-обработку и сохраняет её тип для автодополнения.
+   * @param {Name} name Уникальное имя эффекта.
+   * @param {Effect} fx Экземпляр эффекта.
+   * @returns {Viewport<TFx & Record<Name, Effect>>} Вьюпорт с учётом нового эффекта.
+   */
+  useFX<Name extends string, Effect extends FX<unknown[]>>(
+    name: Name,
+    fx: Effect
+  ): Viewport<TFx & Record<Name, Effect>> {
     fx.setSize(this.size.width, this.size.height);
-    this.fx[name] = fx;
+    this.fxStore[name] = fx;
 
-    return this;
+    return this as unknown as Viewport<TFx & Record<Name, Effect>>;
   }
 }

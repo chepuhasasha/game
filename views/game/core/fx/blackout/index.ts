@@ -7,7 +7,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import fragmentShader from "./fragment.glsl";
 import vertexShader from "./vertex.glsl";
 
-import { FX } from "../../types";
+import type { FX } from "../../types";
 
 export interface BlackoutFXOptions {
   strength: number;
@@ -16,14 +16,23 @@ export interface BlackoutFXOptions {
   edge: number;
 }
 
-export class BlackoutFX implements FX {
+export class BlackoutFX
+  implements FX<[mode: "hide" | "show", duration?: number]>
+{
   composer: EffectComposer;
   renderPass: RenderPass;
   fxPass: ShaderPass;
-
-  private animation: { raf: number; cancel: () => void } | null = null;
   outputPass: OutputPass;
 
+  private animation: { raf: number; cancel: () => void } | null = null;
+
+  /**
+   * Создаёт эффект затемнения сцены.
+   * @param {WebGLRenderer} renderer Активный рендерер трёхмерной сцены.
+   * @param {Scene} scene Сцена, к которой применяется эффект.
+   * @param {Camera} camera Камера сцены.
+   * @param {BlackoutFXOptions} options Настройки интенсивности и плавности.
+   */
   constructor(
     renderer: WebGLRenderer,
     scene: Scene,
@@ -60,18 +69,36 @@ export class BlackoutFX implements FX {
 
     this.disable();
   }
-  enable() {
+
+  /** Включает пост-эффект. */
+  enable(): void {
     this.fxPass.enabled = true;
   }
-  disable() {
+
+  /** Отключает пост-эффект. */
+  disable(): void {
     this.fxPass.enabled = false;
   }
-  setSize(width: number, height: number) {
+
+  /**
+   * Обновляет размеры буфера эффекта.
+   * @param {number} width Ширина области рендеринга.
+   * @param {number} height Высота области рендеринга.
+   */
+  setSize(width: number, height: number): void {
     this.composer.setSize(width, height);
   }
-  render() {
+
+  /** Выполняет один проход рендеринга эффекта. */
+  render(): void {
     this.composer.render();
   }
+
+  /**
+   * Запускает анимацию появления или исчезновения затемнения.
+   * @param {"hide" | "show"} mode Режим скрытия либо показа сцены.
+   * @param {number} [duration=2000] Длительность анимации в миллисекундах.
+   */
   async play(mode: "hide" | "show", duration = 2000): Promise<void> {
     if (mode === "hide") {
       this.setThreshold(1.0);
@@ -82,10 +109,20 @@ export class BlackoutFX implements FX {
     }
   }
 
-  private setThreshold(value: number) {
+  /**
+   * Устанавливает порог срабатывания эффекта.
+   * @param {number} value Значение порога в диапазоне [0, 1].
+   */
+  private setThreshold(value: number): void {
     this.fxPass.uniforms.threshold.value = Math.min(1, Math.max(0, value));
   }
 
+  /**
+   * Плавно изменяет порог эффекта.
+   * @param {number} to Конечное значение порога.
+   * @param {number} [ms=200] Длительность анимации в миллисекундах.
+   * @returns {Promise<void>} Промис, который выполняется после завершения анимации.
+   */
   private animateThreshold(to: number, ms = 200): Promise<void> {
     to = Math.min(1, Math.max(0, to));
 

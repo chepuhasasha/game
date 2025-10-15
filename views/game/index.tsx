@@ -25,17 +25,21 @@ export const Game = ({
         grid: 6,
         size: 2,
       });
-      const instance = new Viewport(gl);
-      viewport.current = instance;
-
-      instance
+      const baseViewport = new Viewport(gl);
+      const instance = baseViewport
         .init()
         .useFX(
           "blackout",
-          new BlackoutFX(instance.renderer, instance.scene, instance.camera)
+          new BlackoutFX(
+            baseViewport.renderer,
+            baseViewport.scene,
+            baseViewport.camera
+          )
         )
         .add(container)
         .render();
+
+      viewport.current = instance;
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
