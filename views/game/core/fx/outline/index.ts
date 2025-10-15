@@ -1,4 +1,4 @@
-import { Color, Vector2, type ColorRepresentation } from "three";
+import { Color, Vector2, type ColorRepresentation, type Texture } from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 
 import fragmentShader from "./fragment.glsl";
@@ -11,12 +11,14 @@ export interface OutlineFXOptions {
   thickness: number;
   intensity: number;
   threshold: number;
+  depthMultiplier: number;
 }
 
 export class OutlineFX extends BaseShaderFX<
   [targetIntensity?: number, duration?: number]
 > {
   private animation: { raf: number; cancel: () => void } | null = null;
+  private depthTexture: Texture | null = null;
 
   /**
    * Создаёт эффект обводки сцены на основе фильтра Собеля.
@@ -28,6 +30,7 @@ export class OutlineFX extends BaseShaderFX<
       thickness = 1.5,
       intensity = 1.0,
       threshold = 0.25,
+      depthMultiplier = 1.25,
     } = options;
 
     const outlineColor = new Color(color);
@@ -41,11 +44,22 @@ export class OutlineFX extends BaseShaderFX<
           thickness: { value: Math.max(0.5, thickness) },
           intensity: { value: Math.max(0, intensity) },
           threshold: { value: Math.max(0, threshold) },
+          depthMultiplier: { value: Math.max(0, depthMultiplier) },
+          tDepth: { value: null },
         },
         vertexShader,
         fragmentShader,
       })
     );
+  }
+
+  /**
+   * Устанавливает текстуру глубины для расчёта контуров по геометрии.
+   * @param {Texture | null} texture Текстура глубины сцены.
+   */
+  setDepthTexture(texture: Texture | null): void {
+    this.depthTexture = texture;
+    this.fxPass.uniforms.tDepth.value = this.depthTexture;
   }
 
   /**
@@ -69,6 +83,7 @@ export class OutlineFX extends BaseShaderFX<
     const resolution = this.fxPass.uniforms.resolution
       .value as Vector2;
     resolution.set(Math.max(1, width), Math.max(1, height));
+
   }
 
   /**

@@ -38,6 +38,7 @@ export const Game = ({
             thickness: 1.35,
             intensity: 1.0,
             threshold: 0.2,
+            depthMultiplier: 1.5,
           })
         )
         .useFX(

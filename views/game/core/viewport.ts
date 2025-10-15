@@ -4,13 +4,17 @@ import {
   AmbientLight,
   Box3,
   Color,
+  DepthTexture,
   DirectionalLight,
   Mesh,
   Object3D,
   OrthographicCamera,
   Scene,
+  UnsignedShortType,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
+  type Texture,
 } from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
@@ -34,6 +38,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   private composer: EffectComposer | null = null;
   private renderPass: RenderPass | null = null;
   private outputPass: OutputPass | null = null;
+  private depthTexture: DepthTexture | null = null;
 
   private events: { [K in EventName]: ((data: unknown) => void)[] } = {
     [EventName.ROTATION_STEP]: [],
@@ -255,6 +260,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     );
     this.insertPass(pass);
     fx.setSize(this.size.width, this.size.height);
+    this.assignDepthTexture(fx);
     this.fxStore[name] = fx;
 
     return this as unknown as Viewport<TFx & Record<Name, Effect>>;
@@ -269,7 +275,15 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
       return;
     }
 
-    this.composer = new EffectComposer(this.renderer);
+    const { width, height } = this.size;
+    const renderTarget = new WebGLRenderTarget(width, height, {
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    renderTarget.depthTexture = new DepthTexture(width, height);
+    renderTarget.depthTexture.type = UnsignedShortType;
+    this.depthTexture = renderTarget.depthTexture;
+    this.composer = new EffectComposer(this.renderer, renderTarget);
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.outputPass = new OutputPass();
 
@@ -295,6 +309,24 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
       this.composer.addPass(pass);
     } else {
       passes.splice(index, 0, pass);
+    }
+  }
+
+  /**
+   * Передаёт текстуру глубины эффектам, поддерживающим работу с ней.
+   * @param {FX<unknown[]>} fx Пост-эффект для обновления униформ.
+   */
+  private assignDepthTexture(fx: FX<unknown[]>): void {
+    if (!this.depthTexture) {
+      return;
+    }
+
+    const candidate = fx as FX<unknown[]> & {
+      setDepthTexture?: (texture: Texture | null) => void;
+    };
+
+    if (typeof candidate.setDepthTexture === "function") {
+      candidate.setDepthTexture(this.depthTexture);
     }
   }
 
