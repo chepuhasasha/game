@@ -1,6 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Container, HeatHazeFX, Viewport } from "./core";
+import { BlackoutFX, Box, Container, HeatHazeFX, Viewport } from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -21,7 +21,8 @@ export const Game = ({
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
-      const container = new Container(6, 1);
+      const box = new Box(1, 1, 1, 1, 1, 1);
+      const box2 = new Box(1, 1, 1, 2, 1, 1);
 
       const instance = new Viewport(gl)
         .init()
@@ -34,12 +35,13 @@ export const Game = ({
           })
         )
         .useFX("blackout", new BlackoutFX())
-        .add(container)
+        .add(box)
+        .add(box2)
         .render();
 
       viewport.current = instance;
 
-      instance.fitToObject(container);
+      // instance.fitToObject(box);
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
