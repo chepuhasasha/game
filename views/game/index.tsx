@@ -44,8 +44,8 @@ export const Game = ({
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
-      instance.fx.heatHaze.enable();
-      instance.fx.heatHaze.play(0.85, 1500);
+      // instance.fx.heatHaze.enable();
+      // instance.fx.heatHaze.play(0.85, 1500);
     },
     []
   );
