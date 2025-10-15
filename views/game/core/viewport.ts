@@ -2,6 +2,7 @@ import type { ExpoWebGLRenderingContext } from "expo-gl";
 import { Renderer } from "expo-three";
 import {
   AmbientLight,
+  Box3,
   Color,
   DirectionalLight,
   Mesh,
@@ -297,7 +298,84 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     }
   }
 
-  fitToObject(obj: Mesh, margin = 0.1) {
-    // ...
+  /**
+   * Подгоняет параметры камеры под выбранный объект сцены.
+   * @param {Mesh} obj Объект, который необходимо полностью вместить в кадр.
+   * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
+   * @returns {void}
+   */
+  fitToObject(obj: Mesh, margin = 0.1): void {
+    const targetBox = new Box3();
+    targetBox.setFromObject(obj);
+
+    if (targetBox.isEmpty()) {
+      return;
+    }
+
+    const safeMargin = Math.max(0, margin);
+
+    const center = targetBox.getCenter(new Vector3());
+    const cameraOffset = this.camera.position.clone().sub(this.target);
+    const lightOffset = this.light.position.clone().sub(this.light.target.position);
+
+    this.target.copy(center);
+    this.camera.position.copy(center.clone().add(cameraOffset));
+    this.camera.lookAt(this.target);
+
+    this.light.position.copy(center.clone().add(lightOffset));
+    this.light.target.position.copy(this.target);
+    this.light.target.updateMatrixWorld();
+
+    this.camera.updateMatrixWorld(true);
+
+    const points = [
+      new Vector3(targetBox.min.x, targetBox.min.y, targetBox.min.z),
+      new Vector3(targetBox.min.x, targetBox.min.y, targetBox.max.z),
+      new Vector3(targetBox.min.x, targetBox.max.y, targetBox.min.z),
+      new Vector3(targetBox.min.x, targetBox.max.y, targetBox.max.z),
+      new Vector3(targetBox.max.x, targetBox.min.y, targetBox.min.z),
+      new Vector3(targetBox.max.x, targetBox.min.y, targetBox.max.z),
+      new Vector3(targetBox.max.x, targetBox.max.y, targetBox.min.z),
+      new Vector3(targetBox.max.x, targetBox.max.y, targetBox.max.z),
+    ];
+
+    const cameraMatrix = this.camera.matrixWorldInverse.clone();
+
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    points.forEach((point) => {
+      const projected = point.clone().applyMatrix4(cameraMatrix);
+      minX = Math.min(minX, projected.x);
+      maxX = Math.max(maxX, projected.x);
+      minY = Math.min(minY, projected.y);
+      maxY = Math.max(maxY, projected.y);
+      minZ = Math.min(minZ, projected.z);
+      maxZ = Math.max(maxZ, projected.z);
+    });
+
+    const baseWidth = this.camera.right - this.camera.left;
+    const baseHeight = this.camera.top - this.camera.bottom;
+    const targetWidth = (maxX - minX) * (1 + safeMargin);
+    const targetHeight = (maxY - minY) * (1 + safeMargin);
+
+    const widthZoom = baseWidth / (targetWidth || 1);
+    const heightZoom = baseHeight / (targetHeight || 1);
+    const zoom = Math.max(Math.min(widthZoom, heightZoom), Number.EPSILON);
+
+    this.camera.zoom = zoom;
+
+    const depth = Math.abs(maxZ - minZ);
+    const depthPadding = depth * safeMargin;
+    const near = Math.max(0.1, -maxZ - depthPadding);
+    const far = Math.max(near + 0.1, -minZ + depthPadding);
+
+    this.camera.near = near;
+    this.camera.far = far;
+    this.camera.updateProjectionMatrix();
   }
 }
