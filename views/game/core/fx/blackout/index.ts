@@ -1,13 +1,9 @@
-import type { Camera, Scene, WebGLRenderer } from "three";
-import { NoBlending } from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import type { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
 import fragmentShader from "./fragment.glsl";
 import vertexShader from "./vertex.glsl";
 
-import type { FX } from "../../types";
+import { BaseShaderFX } from "../base-fx";
 
 export interface BlackoutFXOptions {
   strength: number;
@@ -16,12 +12,9 @@ export interface BlackoutFXOptions {
   edge: number;
 }
 
-export class BlackoutFX
-  implements FX<[mode: "hide" | "show", duration?: number]>
-{
-  composer: EffectComposer | null = null;
-  fxPass: ShaderPass | null = null;
-
+export class BlackoutFX extends BaseShaderFX<
+  [mode: "hide" | "show", duration?: number]
+> {
   private animation: { raf: number; cancel: () => void } | null = null;
 
   /**
@@ -36,72 +29,20 @@ export class BlackoutFX
       edge = 0.0,
     } = options;
 
-    this.fxPass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        strength: { value: strength },
-        scale: { value: scale },
-        threshold: { value: threshold },
-        edge: { value: edge },
-      },
-      vertexShader,
-      fragmentShader,
-    });
-
-    this.fxPass.material.toneMapped = false;
-    this.fxPass.material.depthTest = false;
-    this.fxPass.material.blending = NoBlending;
+    super(
+      new ShaderPass({
+        uniforms: {
+          tDiffuse: { value: null },
+          strength: { value: strength },
+          scale: { value: scale },
+          threshold: { value: threshold },
+          edge: { value: edge },
+        },
+        vertexShader,
+        fragmentShader,
+      })
+    );
   }
-
-  /**
-   * Регистрирует проход затемнения в общем композере.
-   * @param {WebGLRenderer} renderer Активный рендерер сцены.
-   * @param {Scene} scene Сцена, над которой выполняется эффект.
-   * @param {Camera} camera Камера сцены.
-   * @param {EffectComposer} composer Общий композер пост-обработки.
-   * @returns {Pass} Шейдерный проход затемнения.
-   */
-  setup(
-    _renderer: WebGLRenderer,
-    _scene: Scene,
-    _camera: Camera,
-    composer: EffectComposer
-  ): Pass {
-    this.composer = composer;
-    if (!this.fxPass) {
-      throw new Error("Проход эффекта blackout не инициализирован.");
-    }
-
-    this.disable();
-
-    return this.fxPass;
-  }
-
-  /** Включает пост-эффект. */
-  enable(): void {
-    if (this.fxPass) {
-      this.fxPass.enabled = true;
-    }
-  }
-
-  /** Отключает пост-эффект. */
-  disable(): void {
-    if (this.fxPass) {
-      this.fxPass.enabled = false;
-    }
-  }
-
-  /**
-   * Обновляет размеры буфера эффекта.
-   * @param {number} width Ширина области рендеринга.
-   * @param {number} height Высота области рендеринга.
-   */
-  setSize(width: number, height: number): void {
-    this.composer?.setSize(width, height);
-  }
-
-  /** Выполняет один проход обновления uniforms эффекта. */
-  render(): void {}
 
   /**
    * Запускает анимацию появления или исчезновения затемнения.
@@ -123,9 +64,6 @@ export class BlackoutFX
    * @param {number} value Значение порога в диапазоне [0, 1].
    */
   private setThreshold(value: number): void {
-    if (!this.fxPass) {
-      return;
-    }
     this.fxPass.uniforms.threshold.value = Math.min(1, Math.max(0, value));
   }
 
@@ -136,10 +74,6 @@ export class BlackoutFX
    * @returns {Promise<void>} Промис, который выполняется после завершения анимации.
    */
   private animateThreshold(to: number, ms = 200): Promise<void> {
-    if (!this.fxPass) {
-      return Promise.resolve();
-    }
-
     to = Math.min(1, Math.max(0, to));
 
     const u = this.fxPass.uniforms;
