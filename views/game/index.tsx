@@ -25,8 +25,8 @@ export const Game = ({
         grid: 6,
         size: 2,
       });
-      const baseViewport = new Viewport(gl);
-      const instance = baseViewport
+
+      const instance = new Viewport(gl)
         .init()
         .useFX(
           "heatHaze",
