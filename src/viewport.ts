@@ -5,7 +5,6 @@ import {
   Box3,
   Color,
   DirectionalLight,
-  Mesh,
   Object3D,
   OrthographicCamera,
   Scene,
@@ -322,7 +321,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
 
   /**
    * Подгоняет параметры камеры под выбранный объект сцены с плавным переходом.
-   * @param {Mesh} obj Объект, который необходимо полностью вместить в кадр.
+   * @param {Object3D} obj Объект, который необходимо полностью вместить в кадр.
    * @param {number} [duration=2000] Продолжительность анимации в миллисекундах.
    * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
    * @returns {Promise<void>} Промис, завершающийся после окончания анимации.
