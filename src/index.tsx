@@ -4,7 +4,7 @@ import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { Group } from "three";
 
 import { Controls } from "./controls";
-import { BlackoutFX } from "./fx/blackout";
+import { WhiteoutFX } from "./fx/whiteout";
 import { HeatHazeFX } from "./fx/heat-haze";
 import { Viewport } from "./viewport";
 import { generateBoxes } from "./utils/box-generator";
@@ -50,7 +50,7 @@ export const GameViewport = (): JSX.Element => {
             shimmer: 0.5,
           })
         )
-        .useFX("blackout", new BlackoutFX())
+        .useFX("whiteout", new WhiteoutFX())
         .render();
 
       viewport.current = instance;
@@ -67,8 +67,8 @@ export const GameViewport = (): JSX.Element => {
       controls.current = controller;
       instance.fitToObject(root);
 
-      instance.fx.blackout.enable();
-      instance.fx.blackout.play("show");
+      instance.fx.whiteout.enable();
+      instance.fx.whiteout.play("show");
       // instance.fx.heatHaze.enable();
       // instance.fx.heatHaze.play(0.85, 1500);
     },

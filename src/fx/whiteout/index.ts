@@ -5,23 +5,23 @@ import vertexShader from "./vertex.glsl";
 
 import { BaseShaderFX } from "../base-fx";
 
-export interface BlackoutFXOptions {
+export interface WhiteoutFXOptions {
   strength: number;
   scale: number;
   threshold: number;
   edge: number;
 }
 
-export class BlackoutFX extends BaseShaderFX<
+export class WhiteoutFX extends BaseShaderFX<
   [mode: "hide" | "show", duration?: number]
 > {
   private animation: { raf: number; cancel: () => void } | null = null;
 
   /**
-   * Создаёт эффект затемнения сцены с указанными параметрами.
-   * @param {BlackoutFXOptions} [options] Настройки интенсивности и плавности.
+   * Создаёт эффект засветления сцены с указанными параметрами.
+   * @param {WhiteoutFXOptions} [options] Настройки интенсивности и плавности.
    */
-  constructor(options: Partial<BlackoutFXOptions> = {}) {
+  constructor(options: Partial<WhiteoutFXOptions> = {}) {
     const {
       strength = 1.0,
       scale = 4.0,
@@ -45,7 +45,7 @@ export class BlackoutFX extends BaseShaderFX<
   }
 
   /**
-   * Запускает анимацию появления или исчезновения затемнения.
+   * Запускает анимацию появления или исчезновения засветления.
    * @param {"hide" | "show"} mode Режим скрытия либо показа сцены.
    * @param {number} [duration=2000] Длительность анимации в миллисекундах.
    */
@@ -60,7 +60,7 @@ export class BlackoutFX extends BaseShaderFX<
   }
 
   /**
-   * Устанавливает порог срабатывания эффекта.
+   * Устанавливает порог срабатывания эффекта засветления.
    * @param {number} value Значение порога в диапазоне [0, 1].
    */
   private setThreshold(value: number): void {
@@ -68,7 +68,7 @@ export class BlackoutFX extends BaseShaderFX<
   }
 
   /**
-   * Плавно изменяет порог эффекта.
+   * Плавно изменяет порог эффекта засветления.
    * @param {number} to Конечное значение порога.
    * @param {number} [ms=200] Длительность анимации в миллисекундах.
    * @returns {Promise<void>} Промис, который выполняется после завершения анимации.
