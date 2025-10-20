@@ -301,11 +301,11 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   /**
    * Подгоняет параметры камеры под выбранный объект сцены с плавным переходом.
    * @param {Mesh} obj Объект, который необходимо полностью вместить в кадр.
+   * @param {number} [duration=2000] Продолжительность анимации в миллисекундах.
    * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
-   * @param {number} [duration=500] Продолжительность анимации в миллисекундах.
    * @returns {Promise<void>} Промис, завершающийся после окончания анимации.
    */
-  async fitToObject(obj: Mesh, margin = 0.1, duration = 500): Promise<void> {
+  async fitToObject(obj: Mesh, duration = 2000, margin = 0.1): Promise<void> {
     const targetBox = new Box3();
     targetBox.setFromObject(obj);
 

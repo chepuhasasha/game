@@ -43,8 +43,11 @@ export const Game = ({
 
       viewport.current = instance;
 
-      void instance.fitToObject(box);
-      box.rotate(true, true, true)
+      instance.fitToObject(box).then(() => {
+        box.rotate(true, false, true)
+        box.position.x = 3
+        instance.fitToObject(box)
+      })
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
