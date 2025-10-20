@@ -1,6 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Box, Container, HeatHazeFX, Viewport } from "./core";
+import { BlackoutFX, Box, HeatHazeFX, Viewport } from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -43,7 +43,7 @@ export const Game = ({
 
       viewport.current = instance;
 
-      instance.fitToObject(box);
+      void instance.fitToObject(box);
       box.rotate(true, true, true)
 
       instance.fx.blackout.enable();
