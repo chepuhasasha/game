@@ -1,7 +1,14 @@
 import { useCallback, useRef, type JSX } from "react";
-import { StyleSheet } from "react-native";
-import { BlackoutFX, generateBoxes, HeatHazeFX, Viewport } from "@/core";
+import { StyleSheet, type GestureResponderEvent } from "react-native";
+import {
+  BlackoutFX,
+  Controls,
+  generateBoxes,
+  HeatHazeFX,
+  Viewport,
+} from "@/core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
+import { Group } from "three";
 
 export type GameProps = {
   isSoundEnabled: boolean;
@@ -18,15 +25,17 @@ export const Game = ({
   isVibrationEnabled,
 }: GameProps): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
+  const controls = useRef<Controls | null>(null);
+  const pointerPosition = useRef<{ x: number; y: number } | null>(null);
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
       const boxes = generateBoxes({
         seed: 123,
         container: {
-          width: 1.5,
-          height: 1.5,
-          depth: 1.5,
+          width: 1,
+          height: 1,
+          depth: 1,
         },
         cuts: 2,
         debuffDistribution: {
@@ -51,22 +60,17 @@ export const Game = ({
 
       viewport.current = instance;
 
-      instance.add(boxes);
+      const root = new Group();
+      boxes.forEach((box) => {
+        root.add(box);
+      });
 
-      // instance.fitToObject(box).then(async () => {
-      //   await box.animateTransform(
-      //     {
-      //       rotation: {
-      //         rx: true,
-      //         ry: false,
-      //         rz: true,
-      //       },
-      //     },
-      //     300
-      //   );
+      instance.add(root);
 
-      //   await instance.fitToObject(box);
-      // });
+      const controller = new Controls(instance);
+      controller.setTargetObject(root);
+      controls.current = controller;
+      // instance.fitToObject(root);
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
@@ -75,7 +79,58 @@ export const Game = ({
     },
     []
   );
-  return <GLView style={styles.glView} onContextCreate={handleContextCreate} />;
+
+  /**
+   * Фиксирует начальную позицию указателя для последующих вычислений смещения.
+   * @param {GestureResponderEvent} event Событие начала взаимодействия.
+   */
+  const handlePointerStart = useCallback(
+    (event: GestureResponderEvent): void => {
+      const { pageX, pageY } = event.nativeEvent;
+      pointerPosition.current = { x: pageX, y: pageY };
+    },
+    []
+  );
+
+  /**
+   * Обновляет вращение камеры при перемещении указателя.
+   * @param {GestureResponderEvent} event Событие перемещения во время жеста.
+   */
+  const handlePointerMove = useCallback(
+    (event: GestureResponderEvent): void => {
+      if (!controls.current || !pointerPosition.current) {
+        return;
+      }
+
+      const { pageX, pageY } = event.nativeEvent;
+      const deltaX = pageX - pointerPosition.current.x;
+      const deltaY = pageY - pointerPosition.current.y;
+
+      controls.current.rotate({ x: deltaX, y: deltaY });
+
+      pointerPosition.current = { x: pageX, y: pageY };
+    },
+    []
+  );
+
+  /**
+   * Сбрасывает сохранённое положение указателя после завершения взаимодействия.
+   */
+  const handlePointerEnd = useCallback((): void => {
+    pointerPosition.current = null;
+  }, []);
+
+  return (
+    <GLView
+      style={styles.glView}
+      onContextCreate={handleContextCreate}
+      onStartShouldSetResponder={() => true}
+      onResponderGrant={handlePointerStart}
+      onResponderMove={handlePointerMove}
+      onResponderRelease={handlePointerEnd}
+      onResponderTerminate={handlePointerEnd}
+    />
+  );
 };
 
 const styles = StyleSheet.create({
