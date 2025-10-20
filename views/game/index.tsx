@@ -44,19 +44,15 @@ export const Game = ({
       viewport.current = instance;
 
       instance.fitToObject(box).then(async () => {
-        const targetPosition = box.position.clone();
-        targetPosition.x = 3;
-
         await box.animateTransform(
           {
-            position: targetPosition,
             rotation: {
               rx: true,
               ry: false,
               rz: true,
             },
           },
-          1500
+          300
         );
 
         await instance.fitToObject(box);
