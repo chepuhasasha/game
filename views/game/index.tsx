@@ -21,8 +21,11 @@ export const Game = ({
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
-      const box = new Box(1, 1, 1, 1, 1, 1);
-      const box2 = new Box(1, 1, 1, 2, 1, 1);
+      const box = new Box(1, 2, 3, 1, 1, 1, false, false, false, {
+        FRAGILE: false,
+        HEAVY: false,
+        NON_TILTABLE: false,
+      });
 
       const instance = new Viewport(gl)
         .init()
@@ -36,12 +39,12 @@ export const Game = ({
         )
         .useFX("blackout", new BlackoutFX())
         .add(box)
-        .add(box2)
         .render();
 
       viewport.current = instance;
 
-      // instance.fitToObject(box);
+      instance.fitToObject(box);
+      box.rotate(true, true, true)
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");

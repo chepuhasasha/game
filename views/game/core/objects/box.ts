@@ -5,6 +5,12 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
+export type BoxDebuff = {
+  FRAGILE: boolean;
+  NON_TILTABLE: boolean;
+  HEAVY: boolean;
+};
+
 export class Box extends Mesh implements GameObject {
   constructor(
     public readonly width: number,
@@ -12,7 +18,11 @@ export class Box extends Mesh implements GameObject {
     public readonly depth: number,
     public readonly x: number,
     public readonly y: number,
-    public readonly z: number
+    public readonly z: number,
+    public readonly rx: boolean,
+    public readonly ry: boolean,
+    public readonly rz: boolean,
+    public debuffs: BoxDebuff
   ) {
     const geometry = new BoxGeometry(width, height, depth);
     const material = new MeshStandardMaterial({ color: 0x000000 });
@@ -33,6 +43,14 @@ export class Box extends Mesh implements GameObject {
     this.add(edge);
 
     this.position.set(x, y, z);
+    this.rotate(rx, ry, rz);
+  }
+
+  rotate(rx: boolean, ry: boolean, rz: boolean): void {
+    const q = Math.PI / 2;
+    if (rx) this.rotateX(q);
+    if (ry) this.rotateY(q);
+    if (rz) this.rotateZ(q);
   }
 
   update(dt: number): void {
