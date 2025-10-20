@@ -1,5 +1,6 @@
 export * from "./viewport";
 export * from "./types";
+export * from "./controls";
 
 export * from "./objects/box";
 

@@ -228,6 +228,27 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   }
 
   /**
+   * Возвращает копию текущей точки фокуса камеры.
+   * @returns {Vector3} Точка, на которую направлена камера.
+   */
+  get focus(): Vector3 {
+    return this.target.clone();
+  }
+
+  /**
+   * Устанавливает новую точку фокуса камеры и целевой объект освещения.
+   * @param {Vector3} target Позиция, вокруг которой должна смотреть камера.
+   */
+  setFocus(target: Vector3): void {
+    this.target.copy(target);
+    this.camera.lookAt(this.target);
+    this.camera.updateMatrixWorld(true);
+
+    this.light.target.position.copy(this.target);
+    this.light.target.updateMatrixWorld();
+  }
+
+  /**
    * Подключает расширение к текущему вьюпорту.
    * @param {Extension<Viewport<TFx>>} extension Экземпляр расширения.
    * @returns {this} Возвращает текущий экземпляр для чейнинга.
