@@ -1,6 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Box, HeatHazeFX, Viewport } from "./core";
+import { BlackoutFX, Box, generateBoxes, HeatHazeFX, Viewport } from "./core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
@@ -21,10 +21,19 @@ export const Game = ({
 
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
-      const box = new Box(1, 2, 3, 1, 1, 1, false, false, false, {
-        FRAGILE: false,
-        HEAVY: false,
-        NON_TILTABLE: false,
+      const boxes = generateBoxes({
+        seed: 123,
+        container: {
+          width: 1.5,
+          height: 1.5,
+          depth: 1.5,
+        },
+        cuts: 2,
+        debuffDistribution: {
+          FRAGILE: 1,
+          HEAVY: 2,
+          NON_TILTABLE: 1,
+        },
       });
 
       const instance = new Viewport(gl)
@@ -38,25 +47,26 @@ export const Game = ({
           })
         )
         .useFX("blackout", new BlackoutFX())
-        .add(box)
         .render();
 
       viewport.current = instance;
 
-      instance.fitToObject(box).then(async () => {
-        await box.animateTransform(
-          {
-            rotation: {
-              rx: true,
-              ry: false,
-              rz: true,
-            },
-          },
-          300
-        );
+      instance.add(boxes);
 
-        await instance.fitToObject(box);
-      });
+      // instance.fitToObject(box).then(async () => {
+      //   await box.animateTransform(
+      //     {
+      //       rotation: {
+      //         rx: true,
+      //         ry: false,
+      //         rz: true,
+      //       },
+      //     },
+      //     300
+      //   );
+
+      //   await instance.fitToObject(box);
+      // });
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
