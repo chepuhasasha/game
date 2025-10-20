@@ -1,134 +1,87 @@
 import type { ExpoWebGLRenderingContext } from "expo-gl";
-import {
-  Scene,
-  WebGLRenderer,
-  Color,
-  OrthographicCamera,
-  AmbientLight,
-  DirectionalLight,
-  Object3D,
-  Vector3,
-  Box3,
-  Matrix4,
-  FogExp2,
-} from "three";
-import type { Updatable } from "./updatable";
 import { Renderer } from "expo-three";
-import { configureRendererPhysicMaterials } from "./materials";
+import {
+  AmbientLight,
+  Box3,
+  Color,
+  DirectionalLight,
+  Mesh,
+  Object3D,
+  OrthographicCamera,
+  Scene,
+  Vector3,
+  WebGLRenderer,
+} from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
-export class Viewport {
-  private scene!: Scene;
-  private renderer!: WebGLRenderer;
-  private camera!: OrthographicCamera;
-  private raf = 0;
-  private last = 0;
-  private viewSize = 6;
-  private updatables = new Set<Updatable>();
-  private contentRoot: Object3D | null = null;
-  private fitExclusions = new Set<Object3D>();
-  private directionalLight: DirectionalLight | null = null;
-  private readonly screenRayOrigin = new Vector3();
-  private readonly screenRayTarget = new Vector3();
-  private readonly screenRayDirection = new Vector3();
-  private readonly screenIntersectionPoint = new Vector3();
+import { runAnimationLoop } from "./utils/animation";
+import { EventName, type Extension, type FX } from "./types";
 
-  // --- Управление камерой ---
+type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
+
+export class Viewport<TFx extends FXRegistry = FXRegistry> {
+  scene: Scene = new Scene();
+  renderer!: WebGLRenderer;
+  camera!: OrthographicCamera;
+  light!: DirectionalLight;
+
   private target = new Vector3(0, 0, 0);
-  private orbitRadius = 1;
-  private horizontalAngle = 0;
-  private cameraHeightOffset = 0;
-  private rotationStepSize = Math.PI / 24;
-  private rotationStepAccumulator = 0;
-  private rotationStepCallback: ((direction: 1 | -1) => void) | null = null;
-  private rotationVelocity = 0;
-  private pendingRotationDelta = 0;
-  private rotationFriction = 1;
-  private rotationVelocityThreshold = 1e-4;
-  private rotationSensitivity = 0.005;
-  private lastDeltaTime = 1 / 60;
-  private zoom = 1;
-  private targetZoom = 1;
-  private zoomTransitionSpeed = 40;
-  private readonly zoomEpsilon = 1e-4;
-  private readonly fogColor = new Color(0x05060a);
-  private readonly fogTargetTransmittance = 0.25;
+
+  private readonly fxStore: Record<string, FX<unknown[]>> = {};
+
+  private composer: EffectComposer | null = null;
+  private renderPass: RenderPass | null = null;
+  private outputPass: OutputPass | null = null;
+
+  private events: { [K in EventName]: ((data: unknown) => void)[] } = {
+    [EventName.ROTATION_STEP]: [],
+    [EventName.INIT]: [],
+    [EventName.LOOP]: [],
+  };
 
   /**
-   * Создаёт приложение и привязывает его к контейнеру.
-   * @param {ExpoWebGLRenderingContext} gl
+   * Создаёт экземпляр вьюпорта для работы с WebGL-контекстом.
+   * @param {ExpoWebGLRenderingContext} gl Графический контекст Expo.
    */
   constructor(private readonly gl: ExpoWebGLRenderingContext) {}
 
   /**
-   * Инициализирует сцену, камеру, рендерер и базовый свет.
-   * @returns {void}
+   * Инициализирует основные сущности сцены: камеру, рендерер и освещение.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
    */
-  init(): void {
-    const { w, h } = this.size();
-    this.scene = new Scene();
-    this.scene.background = this.fogColor.clone();
-    this.scene.fog = new FogExp2(this.fogColor.clone(), Number.EPSILON);
+  init(): this {
+    const { width, height } = this.size;
+    this.scene.background = new Color(0x000000);
 
-    this.camera = this.makeCamera(w, h);
-    this.camera.position.set(5, 4, 5);
-    this.camera.lookAt(this.target);
-    this.scene.add(this.camera);
-    this.contentRoot = new Object3D();
-    this.scene.add(this.contentRoot);
-    const offset = new Vector3().copy(this.camera.position).sub(this.target);
-    this.orbitRadius = Math.sqrt(offset.x ** 2 + offset.z ** 2);
-    this.horizontalAngle = Math.atan2(offset.x, offset.z);
-    this.cameraHeightOffset = offset.y;
+    this.initCamera(width, height);
+    this.initRenderer(width, height);
+    this.initLight(this.camera.position);
 
-    this.renderer = new Renderer({ gl: this.gl, antialias: false });
-    configureRendererPhysicMaterials(this.renderer);
-    this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(1);
+    this.emit(EventName.INIT);
 
-    this.scene.add(new AmbientLight(0xffffff, 1));
-    const dir = new DirectionalLight(0xffffff, 5);
-    this.directionalLight = dir;
-    dir.position.copy(this.camera.position);
-    dir.target.position.copy(this.target);
-    this.scene.add(dir);
-    this.scene.add(dir.target);
-    this.updateDirectionalLight();
-
-    this.render();
+    return this;
   }
 
   /**
-   * Возвращает текущий размер контейнера.
-   * @returns {{w:number,h:number}} Ширина и высота в пикселях.
+   * Возвращает зарегистрированные эффекты с сохранением типов.
+   * @returns {TFx} Коллекция эффектов, доступных вьюпорту.
    */
-  private size(): { w: number; h: number } {
-    const { drawingBufferWidth: w, drawingBufferHeight: h } = this.gl;
-    return { w, h };
+  get fx(): TFx {
+    return this.fxStore as TFx;
   }
 
   /**
-   * Предоставляет размеры буфера рендеринга в пикселях для расчётов вьюпорта.
-   * @returns {{ width: number; height: number } | null} Объект с шириной и высотой либо null.
+   * Настраивает ортографическую камеру на основе размеров сцены.
+   * @param {number} width Текущая ширина сцены.
+   * @param {number} height Текущая высота сцены.
    */
-  getViewportSize(): { width: number; height: number } | null {
-    const { w, h } = this.size();
-    if (w === 0 || h === 0) {
-      return null;
-    }
-
-    return { width: w, height: h };
-  }
-
-  /**
-   * Создаёт ортографическую камеру под заданный размер вьюпорта.
-   * @param {number} w Ширина.
-   * @param {number} h Высота.
-   * @returns {OrthographicCamera} Камера.
-   */
-  private makeCamera(w: number, h: number): OrthographicCamera {
-    const aspect = w / h;
-    const half = this.viewSize / 2;
-    const cam = new OrthographicCamera(
+  private initCamera(width: number, height: number): void {
+    const aspect = width / height;
+    const half = 6 / 2;
+    this.camera = new OrthographicCamera(
       -half * aspect,
       half * aspect,
       half,
@@ -136,157 +89,100 @@ export class Viewport {
       0.1,
       1000
     );
-    cam.updateProjectionMatrix();
-    return cam;
+    this.camera.updateProjectionMatrix();
+    this.camera.position.set(5, 4, 5);
+    this.camera.lookAt(this.target);
+    this.scene.add(this.camera);
   }
 
   /**
-   * Находит точку пересечения луча из экрана с горизонтальной плоскостью на заданной высоте.
-   * @param {number} screenX Горизонтальная координата экрана в пикселях.
-   * @param {number} screenY Вертикальная координата экрана в пикселях.
-   * @param {number} planeY Высота плоскости в мировых координатах.
-   * @returns {Vector3 | null} Точка пересечения в мировых координатах либо null, если пересечения нет.
+   * Создаёт и настраивает рендерер для текущего контекста.
+   * @param {number} width Ширина буфера рендеринга.
+   * @param {number} height Высота буфера рендеринга.
    */
-  screenPointToWorldOnPlane(
-    screenX: number,
-    screenY: number,
-    planeY: number
-  ): Vector3 | null {
-    if (!this.camera) {
-      return null;
-    }
-
-    const { w, h } = this.size();
-    if (w === 0 || h === 0) {
-      return null;
-    }
-
-    const ndcX = (screenX / w) * 2 - 1;
-    const ndcY = -((screenY / h) * 2 - 1);
-
-    const origin = this.screenRayOrigin
-      .set(ndcX, ndcY, -1)
-      .unproject(this.camera);
-    const target = this.screenRayTarget
-      .set(ndcX, ndcY, 1)
-      .unproject(this.camera);
-    const direction = this.screenRayDirection.copy(target).sub(origin);
-
-    if (direction.lengthSq() === 0) {
-      return null;
-    }
-
-    direction.normalize();
-    const denominator = direction.y;
-
-    if (Math.abs(denominator) < 1e-6) {
-      return null;
-    }
-
-    const t = (planeY - origin.y) / denominator;
-
-    if (!Number.isFinite(t) || t < 0) {
-      return null;
-    }
-
-    return this.screenIntersectionPoint
-      .copy(origin)
-      .add(direction.multiplyScalar(t));
+  private initRenderer(width: number, height: number): void {
+    this.renderer = new Renderer({
+      gl: this.gl,
+      width,
+      height,
+      antialias: true,
+      pixelRatio: 1,
+    });
   }
 
   /**
-   * Добавляет объект на сцену.
-   * Если у объекта есть метод update, регистрирует его для кадровых обновлений.
-   * При передаче флага excludeFromFit объект будет игнорироваться при fitToContent.
-   * @param {Object3D} obj Трёхмерный объект.
-   * @param {{ excludeFromFit?: boolean }} [options] Параметры добавления объекта.
-   * @returns {void}
+   * Подготавливает источники освещения сцены.
+   * @param {Vector3} position Позиция основного источника света.
    */
-  add(obj: Object3D, options?: { excludeFromFit?: boolean }): void {
-    if (this.contentRoot) {
-      this.contentRoot.add(obj);
+  private initLight(position: Vector3): void {
+    this.light = new DirectionalLight(0xffffff, 1);
+    this.light.position.copy(position);
+    this.light.target.position.copy(this.target);
+    this.scene.add(new AmbientLight(0xffffff, 1));
+    this.scene.add(this.light);
+    this.scene.add(this.light.target);
+  }
+
+  /**
+   * Основной цикл рендеринга, запускаемый на каждом кадре.
+   * @param {number} [t=0] Текущее время анимации.
+   */
+  private loop = (t = 0): void => {
+    this.emit(EventName.LOOP, t);
+    const effects = Object.values(this.fxStore);
+    if (this.composer) {
+      if (this.renderPass) {
+        this.renderPass.camera = this.camera;
+        this.renderPass.scene = this.scene;
+      }
+      effects.forEach((fx) => fx.render());
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
+    this.gl.endFrameEXP();
+  };
+
+  /**
+   * Запускает цикл рендеринга.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  render(): this {
+    this.renderer.setAnimationLoop(this.loop);
+    return this;
+  }
+
+  /**
+   * Добавляет один или несколько объектов на сцену.
+   * @param {Object3D | Object3D[]} obj Объект либо список объектов Three.js.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  add(obj: Object3D[] | Object3D): this {
+    if (Array.isArray(obj)) {
+      this.scene.add(...obj);
     } else {
       this.scene.add(obj);
     }
-
-    if (options?.excludeFromFit) {
-      this.fitExclusions.add(obj);
-    }
-
-    const maybeUpdatable = obj as unknown as Partial<Updatable>;
-    if (typeof maybeUpdatable.update === "function") {
-      this.updatables.add(maybeUpdatable as Updatable);
-    }
+    return this;
   }
 
   /**
-   * Удаляет объект со сцены и дерегистриует из апдейтов.
-   * Если у объекта есть метод dispose, вызывает его.
-   * @param {Object3D} obj Трёхмерный объект.
-   * @returns {void}
+   * Удаляет объект со сцены и вызывает его dispose при наличии.
+   * @param {Object3D} obj Удаляемый объект сцены.
    */
   remove(obj: Object3D): void {
-    if (this.contentRoot) {
-      this.contentRoot.remove(obj);
-    } else {
-      this.scene.remove(obj);
-    }
-    this.fitExclusions.delete(obj);
-    this.updatables.delete(obj as unknown as Updatable);
+    this.scene.remove(obj);
     const disposable = obj as unknown as { dispose?: () => void };
     if (typeof disposable.dispose === "function") disposable.dispose();
   }
 
-  /**
-   * Вычисляет ограничивающий параллелепипед для объектов сцены, учитываемых fitToContent.
-   * @returns {Box3 | null} Объём ограничивающего параллелепипеда или null, если нет объектов.
-   */
-  private computeFitBoundingBox(): Box3 | null {
-    if (!this.contentRoot) {
-      return null;
-    }
-
-    const box = new Box3();
-    let hasBox = false;
-
-    for (const child of this.contentRoot.children) {
-      if (this.fitExclusions.has(child)) {
-        continue;
-      }
-
-      const childBox = new Box3().setFromObject(child);
-      if (!Number.isFinite(childBox.min.x) || childBox.isEmpty()) {
-        continue;
-      }
-
-      if (!hasBox) {
-        box.copy(childBox);
-        hasBox = true;
-      } else {
-        box.union(childBox);
-      }
-    }
-
-    return hasBox ? box : null;
-  }
-
-  /**
-   * Очищает сцену от всех объектов кроме камеры и света.
-   * Вызывает dispose у поддерживающих его объектов.
-   * @returns {void}
-   */
+  /** Удаляет все вспомогательные объекты со сцены, кроме камеры и света. */
   clear(): void {
-    if (this.contentRoot) {
-      const toRemove = [...this.contentRoot.children];
-      toRemove.forEach((child) => this.remove(child));
-      return;
-    }
-
-    const keep = new Set([this.camera]);
+    const keep = new Set<Object3D>([this.camera]);
     const toRemove: Object3D[] = [];
     this.scene.children.forEach((child) => {
       if (
-        !keep.has(child as any) &&
+        !keep.has(child) &&
         !(child instanceof AmbientLight) &&
         !(child instanceof DirectionalLight)
       ) {
@@ -297,405 +193,270 @@ export class Viewport {
   }
 
   /**
-   * Кадровой цикл: обновляет Updatable-объекты и рендерит сцену.
-   * @param {number} t Текущее время из requestAnimationFrame в мс.
-   * @returns {void}
+   * Отправляет событие подписчикам внутри вьюпорта.
+   * @param {EventName} event Имя события.
+   * @param {unknown} [data] Дополнительные данные события.
    */
-  private loop = (t = 0): void => {
-    const dt = this.last ? (t - this.last) / 1000 : 0;
-    this.last = t;
-    if (dt > 0) {
-      this.lastDeltaTime = dt;
-    }
-    this.updateCameraRotation(dt);
-    this.updateCameraZoom(dt);
-    this.updatables.forEach((u) => u.update(dt));
-    this.renderer.render(this.scene, this.camera);
-    this.gl.endFrameEXP();
-    this.raf = requestAnimationFrame(this.loop);
-  };
-
-  /**
-   * Запускает рендер-цикл.
-   * @returns {void}
-   */
-  render(): void {
-    cancelAnimationFrame(this.raf);
-    this.last = 0;
-    this.raf = requestAnimationFrame(this.loop);
-  }
-
-  /**
-   * Освобождает ресурсы.
-   * @returns {void}
-   */
-  dispose(): void {
-    cancelAnimationFrame(this.raf);
-    this.clear();
-    this.renderer?.dispose();
-    if (this.directionalLight) {
-      this.scene.remove(this.directionalLight);
-      this.scene.remove(this.directionalLight.target);
-      this.directionalLight = null;
+  private emit(event: EventName, data?: unknown): void {
+    if (this.events[event]) {
+      this.events[event].forEach((cb) => cb(data));
     }
   }
 
   /**
-   * Устанавливает масштаб ортографической камеры.
-   * @param {number} z Новое значение zoom.
+   * Подписывает обработчик на событие вьюпорта.
+   * @param {EventName} event Имя события.
+   * @param {(data: unknown) => void} cb Обработчик события.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  on(event: EventName, cb: (data: unknown) => void): this {
+    if (this.events[event]) {
+      this.events[event].push(cb);
+    } else {
+      throw new Error("Недопустимое название события.");
+    }
+    return this;
+  }
+
+  /**
+   * Возвращает актуальные размеры буфера рендеринга.
+   * @returns {{ width: number; height: number }} Параметры размера сцены.
+   */
+  get size(): { width: number; height: number } {
+    const { drawingBufferWidth: width, drawingBufferHeight: height } = this.gl;
+    return { width, height };
+  }
+
+  /**
+   * Подключает расширение к текущему вьюпорту.
+   * @param {Extension<Viewport<TFx>>} extension Экземпляр расширения.
+   * @returns {this} Возвращает текущий экземпляр для чейнинга.
+   */
+  use(extension: Extension<Viewport<TFx>>): this {
+    extension.setup(this);
+    return this;
+  }
+
+  /**
+   * Регистрирует пост-обработку и сохраняет её тип для автодополнения.
+   * @param {Name} name Уникальное имя эффекта.
+   * @param {Effect} fx Экземпляр эффекта.
+   * @returns {Viewport<TFx & Record<Name, Effect>>} Вьюпорт с учётом нового эффекта.
+   */
+  useFX<Name extends string, Effect extends FX<unknown[]>>(
+    name: Name,
+    fx: Effect
+  ): Viewport<TFx & Record<Name, Effect>> {
+    this.ensureComposer();
+    const pass = fx.setup(
+      this.renderer,
+      this.scene,
+      this.camera,
+      this.composer as EffectComposer
+    );
+    this.insertPass(pass);
+    fx.setSize(this.size.width, this.size.height);
+    this.fxStore[name] = fx;
+
+    return this as unknown as Viewport<TFx & Record<Name, Effect>>;
+  }
+
+  /**
+   * Гарантирует наличие общего композера пост-эффектов.
    * @returns {void}
    */
-  setZoom(z: number): void {
-    if (!Number.isFinite(z)) {
+  private ensureComposer(): void {
+    if (this.composer) {
       return;
     }
 
-    const nextZoom = Math.max(Number.EPSILON, z);
-    this.zoom = nextZoom;
-    this.targetZoom = nextZoom;
-    this.camera.zoom = nextZoom;
-    this.camera.updateProjectionMatrix();
+    this.composer = new EffectComposer(this.renderer);
+    this.renderPass = new RenderPass(this.scene, this.camera);
+    this.outputPass = new OutputPass();
+
+    this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.outputPass);
+    this.composer.setSize(this.size.width, this.size.height);
   }
 
   /**
-   * Плавно изменяет zoom ортографической камеры к новому значению.
-   * @param {number} z Желаемое значение zoom.
+   * Вставляет новый проход перед выходным проходом композера.
+   * @param {Pass} pass Экземпляр прохода, добавляемого в цепочку.
    * @returns {void}
    */
-  smoothZoomTo(z: number): void {
-    if (!Number.isFinite(z)) {
+  private insertPass(pass: Pass): void {
+    if (!this.composer || !this.outputPass) {
       return;
     }
 
-    this.targetZoom = Math.max(Number.EPSILON, z);
-  }
+    const passes = this.composer.passes;
+    const index = passes.indexOf(this.outputPass);
 
-  /**
-   * Возвращает целевое значение zoom для ортографической камеры.
-   * @returns {number} Текущее целевое значение zoom.
-   */
-  getZoom(): number {
-    return this.targetZoom;
-  }
-
-  /**
-   * Поворачивает камеру вокруг целевой точки в горизонтальной плоскости.
-   * @param {number} deltaX Изменение жеста по оси X в пикселях.
-   * @returns {void}
-   */
-  rotateHorizontally(deltaX: number): void {
-    if (!this.camera) return;
-    if (this.orbitRadius === 0) return;
-
-    const deltaAngle = -deltaX * this.rotationSensitivity;
-    this.pendingRotationDelta += deltaAngle;
-    const dt = this.lastDeltaTime || 1 / 60;
-    this.rotationVelocity = deltaAngle / dt;
-  }
-
-  /**
-   * Настраивает параметры инерции горизонтального вращения камеры.
-   * @param {{ friction?: number; velocityThreshold?: number; sensitivity?: number }} options
-   *   Объект с параметрами инерции.
-   * @param {number} [options.friction]
-   *   Коэффициент экспоненциального демпфирования угловой скорости: чем больше значение, тем
-   *   быстрее скорость затухает после завершения жеста. Ноль отключает торможение.
-   * @param {number} [options.velocityThreshold]
-   *   Минимальная по модулю угловая скорость, при падении ниже которой инерция считается
-   *   завершённой и дальнейшее вращение прекращается.
-   * @param {number} [options.sensitivity]
-   *   Множитель преобразования горизонтального жеста в радианы: влияет на скорость поворота
-   *   камеры при перетаскивании, а также на исходную скорость инерции.
-   * @returns {void}
-   */
-  setRotationInertia({
-    friction,
-    velocityThreshold,
-    sensitivity,
-  }: {
-    friction?: number;
-    velocityThreshold?: number;
-    sensitivity?: number;
-  }): void {
-    if (typeof friction === "number" && Number.isFinite(friction)) {
-      this.rotationFriction = Math.max(0, friction);
-    }
-
-    if (
-      typeof velocityThreshold === "number" &&
-      Number.isFinite(velocityThreshold)
-    ) {
-      this.rotationVelocityThreshold = Math.max(0, velocityThreshold);
-    }
-
-    if (typeof sensitivity === "number" && Number.isFinite(sensitivity)) {
-      this.rotationSensitivity = Math.max(0, sensitivity);
+    if (index === -1) {
+      this.composer.addPass(pass);
+    } else {
+      passes.splice(index, 0, pass);
     }
   }
 
   /**
-   * Применяет изменение горизонтального угла камеры и обновляет позицию.
-   * Также уведомляет обратный вызов о прохождении дискретных шагов.
-   * @param {number} deltaAngle Изменение угла в радианах.
-   * @returns {void}
+   * Подгоняет параметры камеры под выбранный объект сцены с плавным переходом.
+   * @param {Mesh} obj Объект, который необходимо полностью вместить в кадр.
+   * @param {number} [duration=2000] Продолжительность анимации в миллисекундах.
+   * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
+   * @returns {Promise<void>} Промис, завершающийся после окончания анимации.
    */
-  private applyHorizontalAngleDelta(deltaAngle: number): void {
-    this.horizontalAngle += deltaAngle;
+  async fitToObject(obj: Mesh, duration = 2000, margin = 0.1): Promise<void> {
+    const targetBox = new Box3();
+    targetBox.setFromObject(obj);
 
-    this.rotationStepAccumulator += deltaAngle;
-    while (Math.abs(this.rotationStepAccumulator) >= this.rotationStepSize) {
-      const direction = this.rotationStepAccumulator > 0 ? 1 : -1;
-      this.rotationStepAccumulator -= this.rotationStepSize * direction;
-      this.rotationStepCallback?.(direction);
-    }
-
-    this.updateCameraPositionFromOrbit();
-  }
-
-  /**
-   * Обновляет вращение камеры с учётом инерции и накопленных изменений.
-   * @param {number} dt Дельта времени между кадрами в секундах.
-   * @returns {void}
-   */
-  private updateCameraRotation(dt: number): void {
-    if (!this.camera) return;
-
-    if (this.pendingRotationDelta !== 0) {
-      this.applyHorizontalAngleDelta(this.pendingRotationDelta);
-      this.pendingRotationDelta = 0;
-    }
-
-    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
-      this.rotationVelocity = 0;
+    if (targetBox.isEmpty()) {
       return;
     }
 
-    const damping = dt > 0 ? Math.exp(-this.rotationFriction * dt) : 1;
-    this.rotationVelocity *= damping;
+    const safeMargin = Math.max(0, margin);
 
-    if (Math.abs(this.rotationVelocity) <= this.rotationVelocityThreshold) {
-      this.rotationVelocity = 0;
-      return;
-    }
+    const center = targetBox.getCenter(new Vector3());
+    const cameraOffset = this.camera.position.clone().sub(this.target);
+    const lightOffset = this.light.position
+      .clone()
+      .sub(this.light.target.position);
 
-    const deltaAngle =
-      this.rotationVelocity * (dt > 0 ? dt : this.lastDeltaTime);
-    this.applyHorizontalAngleDelta(deltaAngle);
-  }
+    const targetPosition = center.clone().add(cameraOffset);
+    const targetLightPosition = center.clone().add(lightOffset);
+    const targetLightTarget = center.clone();
 
-  /**
-   * Постепенно приближает текущий zoom камеры к целевому значению.
-   * @param {number} dt Время между кадрами в секундах.
-   * @returns {void}
-   */
-  private updateCameraZoom(dt: number): void {
-    if (!this.camera) {
-      return;
-    }
+    const cameraClone = this.camera.clone();
+    cameraClone.position.copy(targetPosition);
+    cameraClone.lookAt(targetLightTarget);
+    cameraClone.updateMatrixWorld(true);
 
-    const currentZoom = this.zoom;
-    const targetZoom = this.targetZoom;
-    if (Math.abs(currentZoom - targetZoom) <= this.zoomEpsilon) {
-      this.zoom = targetZoom;
-      const difference = Math.abs(this.camera.zoom - targetZoom);
-      this.camera.zoom = targetZoom;
-      if (difference > 0) {
-        this.camera.updateProjectionMatrix();
-      }
-      return;
-    }
-
-    const deltaTime = Math.max(0, dt);
-    const factor =
-      deltaTime > 0 ? 1 - Math.exp(-this.zoomTransitionSpeed * deltaTime) : 1;
-    const nextZoom = currentZoom + (targetZoom - currentZoom) * factor;
-    this.zoom = nextZoom;
-    const differenceToNext = Math.abs(this.camera.zoom - nextZoom);
-    this.camera.zoom = nextZoom;
-
-    if (differenceToNext > 0) {
-      this.camera.updateProjectionMatrix();
-    }
-  }
-
-  /**
-   * Пересчитывает позицию камеры исходя из текущей орбиты вокруг цели.
-   * @returns {void}
-   */
-  private updateCameraPositionFromOrbit(): void {
-    if (!this.camera) return;
-    const x = this.target.x + Math.sin(this.horizontalAngle) * this.orbitRadius;
-    const z = this.target.z + Math.cos(this.horizontalAngle) * this.orbitRadius;
-    const y = this.target.y + this.cameraHeightOffset;
-    this.camera.position.set(x, y, z);
-    this.camera.lookAt(this.target);
-    this.updateDirectionalLight();
-  }
-
-  /**
-   * Настраивает обратную связь при прохождении дискретных шагов вращения.
-   * @param {number} stepAngle Угол в радианах между шагами вибрации.
-   * @param {(direction: 1 | -1) => void} callback Колбэк, вызываемый при каждом шаге.
-   * @returns {void}
-   */
-  setRotationStepFeedback(
-    stepAngle: number,
-    callback: (direction: 1 | -1) => void
-  ): void {
-    this.rotationStepSize = Math.max(Math.abs(stepAngle), Number.EPSILON);
-    this.rotationStepAccumulator = 0;
-    this.rotationStepCallback = callback;
-  }
-
-  /**
-   * Подбирает zoom ортографической камеры так, чтобы весь контент попадал в кадр.
-   * Центр кадра совмещается с центром сцены, а также учитывается заданный отступ.
-   * @param {number} [marginRatio=0.1] Дополнительный отступ к размеру сцены (0.1 = 10%).
-   * @returns {void}
-   */
-  fitToContent(marginRatio = 0.1): void {
-    if (!this.camera) return;
-
-    const box = this.computeFitBoundingBox();
-    if (!box) {
-      return;
-    }
-
-    const center = new Vector3();
-    box.getCenter(center);
-    this.target.copy(center);
-    this.updateCameraPositionFromOrbit();
-
-    this.camera.updateMatrixWorld(true);
-    const matrix = new Matrix4().copy(this.camera.matrixWorldInverse);
-
-    const forward = new Vector3()
-      .subVectors(this.target, this.camera.position)
-      .normalize();
-
-    const corners = [
-      new Vector3(box.min.x, box.min.y, box.min.z),
-      new Vector3(box.min.x, box.min.y, box.max.z),
-      new Vector3(box.min.x, box.max.y, box.min.z),
-      new Vector3(box.min.x, box.max.y, box.max.z),
-      new Vector3(box.max.x, box.min.y, box.min.z),
-      new Vector3(box.max.x, box.min.y, box.max.z),
-      new Vector3(box.max.x, box.max.y, box.min.z),
-      new Vector3(box.max.x, box.max.y, box.max.z),
+    const points = [
+      new Vector3(targetBox.min.x, targetBox.min.y, targetBox.min.z),
+      new Vector3(targetBox.min.x, targetBox.min.y, targetBox.max.z),
+      new Vector3(targetBox.min.x, targetBox.max.y, targetBox.min.z),
+      new Vector3(targetBox.min.x, targetBox.max.y, targetBox.max.z),
+      new Vector3(targetBox.max.x, targetBox.min.y, targetBox.min.z),
+      new Vector3(targetBox.max.x, targetBox.min.y, targetBox.max.z),
+      new Vector3(targetBox.max.x, targetBox.max.y, targetBox.min.z),
+      new Vector3(targetBox.max.x, targetBox.max.y, targetBox.max.z),
     ];
 
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    let minCameraZ = Infinity;
-    let maxCameraZ = -Infinity;
+    const cameraMatrix = cameraClone.matrixWorldInverse.clone();
 
-    corners.forEach((corner) => {
-      const projected = corner.clone().applyMatrix4(matrix);
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    let minZ = Number.POSITIVE_INFINITY;
+    let maxZ = Number.NEGATIVE_INFINITY;
+
+    points.forEach((point) => {
+      const projected = point.clone().applyMatrix4(cameraMatrix);
       minX = Math.min(minX, projected.x);
       maxX = Math.max(maxX, projected.x);
       minY = Math.min(minY, projected.y);
       maxY = Math.max(maxY, projected.y);
-      minCameraZ = Math.min(minCameraZ, projected.z);
-      maxCameraZ = Math.max(maxCameraZ, projected.z);
+      minZ = Math.min(minZ, projected.z);
+      maxZ = Math.max(maxZ, projected.z);
     });
-
-    const width = maxX - minX;
-    const height = maxY - minY;
 
     const baseWidth = this.camera.right - this.camera.left;
     const baseHeight = this.camera.top - this.camera.bottom;
-    const marginMultiplier = 1 + Math.max(0, marginRatio);
+    const targetWidth = (maxX - minX) * (1 + safeMargin);
+    const targetHeight = (maxY - minY) * (1 + safeMargin);
 
-    const effectiveWidth = Math.max(width * marginMultiplier, Number.EPSILON);
-    const effectiveHeight = Math.max(height * marginMultiplier, Number.EPSILON);
+    const widthZoom = baseWidth / (targetWidth || 1);
+    const heightZoom = baseHeight / (targetHeight || 1);
+    const zoom = Math.max(Math.min(widthZoom, heightZoom), Number.EPSILON);
 
-    const zoomX = baseWidth / effectiveWidth;
-    const zoomY = baseHeight / effectiveHeight;
-    const nextZoom = Math.min(zoomX, zoomY);
+    const depth = Math.abs(maxZ - minZ);
+    const depthPadding = depth * safeMargin;
+    const near = Math.max(0.1, -maxZ - depthPadding);
+    const far = Math.max(near + 0.1, -minZ + depthPadding);
 
-    if (Number.isFinite(nextZoom) && nextZoom > 0) {
-      this.setZoom(nextZoom);
+    if (duration <= 0) {
+      this.target.copy(center);
+      this.camera.position.copy(targetPosition);
+      this.camera.lookAt(this.target);
+
+      this.light.position.copy(targetLightPosition);
+      this.light.target.position.copy(this.target);
+      this.light.target.updateMatrixWorld();
+
+      this.camera.zoom = zoom;
+      this.camera.near = near;
+      this.camera.far = far;
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld(true);
+
+      return;
     }
 
-    if (
-      forward.lengthSq() > 0 &&
-      Number.isFinite(minCameraZ) &&
-      Number.isFinite(maxCameraZ)
-    ) {
-      const frontDistance = -maxCameraZ;
-      const backDistance = -minCameraZ;
-      const depth = Math.max(backDistance - frontDistance, Number.EPSILON);
-      const depthMargin = depth * Math.max(0, marginRatio);
+    const startTarget = this.target.clone();
+    const startCameraPosition = this.camera.position.clone();
+    const startLightPosition = this.light.position.clone();
+    const startLightTarget = this.light.target.position.clone();
+    const startZoom = this.camera.zoom;
+    const startNear = this.camera.near;
+    const startFar = this.camera.far;
 
-      let paddedFrontDistance = frontDistance - depthMargin;
-      let paddedBackDistance = backDistance + depthMargin;
+    const targetTarget = center.clone();
 
-      const minNear = 0.01;
+    const tempTarget = new Vector3();
+    const tempCameraPosition = new Vector3();
+    const tempLightPosition = new Vector3();
+    const tempLightTarget = new Vector3();
 
-      if (paddedFrontDistance <= minNear) {
-        const shift = minNear - paddedFrontDistance;
-        if (Number.isFinite(shift) && shift > 0) {
-          this.camera.position.addScaledVector(forward, -shift);
-          this.camera.lookAt(this.target);
-          paddedFrontDistance += shift;
-          paddedBackDistance += shift;
+    const ease = (t: number): number => 1 - Math.pow(1 - t, 3);
 
-          const updatedOffset = new Vector3()
-            .copy(this.camera.position)
-            .sub(this.target);
-          this.orbitRadius = Math.hypot(updatedOffset.x, updatedOffset.z);
-          this.cameraHeightOffset = updatedOffset.y;
-        }
-      }
+    await runAnimationLoop({
+      duration,
+      easing: ease,
+      onFrame: ({ easedProgress }) => {
+        this.target.copy(
+          tempTarget.copy(startTarget).lerp(targetTarget, easedProgress)
+        );
+        this.camera.position.copy(
+          tempCameraPosition
+            .copy(startCameraPosition)
+            .lerp(targetPosition, easedProgress)
+        );
+        this.camera.lookAt(this.target);
 
-      const desiredNear = Math.max(minNear, paddedFrontDistance);
-      const desiredFar = Math.max(desiredNear + 1, paddedBackDistance);
+        this.light.position.copy(
+          tempLightPosition
+            .copy(startLightPosition)
+            .lerp(targetLightPosition, easedProgress)
+        );
 
-      if (Number.isFinite(desiredNear) && Number.isFinite(desiredFar)) {
-        this.camera.near = desiredNear;
-        this.camera.far = desiredFar;
+        this.light.target.position.copy(
+          tempLightTarget
+            .copy(startLightTarget)
+            .lerp(targetLightTarget, easedProgress)
+        );
+        this.light.target.updateMatrixWorld();
+
+        this.camera.zoom = startZoom + (zoom - startZoom) * easedProgress;
+        this.camera.near = startNear + (near - startNear) * easedProgress;
+        this.camera.far = startFar + (far - startFar) * easedProgress;
         this.camera.updateProjectionMatrix();
-      }
+        this.camera.updateMatrixWorld(true);
+      },
+    });
 
-      this.updateFogForDepth(paddedBackDistance);
-    }
-  }
+    this.target.copy(targetTarget);
+    this.camera.position.copy(targetPosition);
+    this.camera.lookAt(this.target);
 
-  /**
-   * Синхронизирует позицию и направление направленного света с камерой и целевой точкой.
-   * @returns {void}
-   */
-  private updateDirectionalLight(): void {
-    if (!this.directionalLight || !this.camera) {
-      return;
-    }
+    this.light.position.copy(targetLightPosition);
+    this.light.target.position.copy(targetLightTarget);
+    this.light.target.updateMatrixWorld();
 
-    this.directionalLight.position.copy(this.camera.position);
-    this.directionalLight.target.position.copy(this.target);
-    this.directionalLight.target.updateMatrixWorld();
-  }
-
-  /**
-   * Пересчитывает плотность тумана в зависимости от глубины сцены, скрывая дальний план.
-   * @param {number} depth Расстояние от камеры до дальней границы содержимого в мировых единицах.
-   * @returns {void}
-   */
-  private updateFogForDepth(depth: number): void {
-    if (!this.scene || !Number.isFinite(depth) || depth <= 0) {
-      return;
-    }
-
-    let fog = this.scene.fog;
-    if (!(fog instanceof FogExp2)) {
-      fog = new FogExp2(this.fogColor.clone(), Number.EPSILON);
-      this.scene.fog = fog;
-    }
-
-    const safeDepth = Math.max(depth, Number.EPSILON);
-    const density = -Math.log(this.fogTargetTransmittance) / safeDepth;
-    fog.density = density;
-    fog.color.copy(this.fogColor);
+    this.camera.zoom = zoom;
+    this.camera.near = near;
+    this.camera.far = far;
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
   }
 }

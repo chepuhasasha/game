@@ -1,6 +1,6 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet } from "react-native";
-import { BlackoutFX, Box, generateBoxes, HeatHazeFX, Viewport } from "./core";
+import { BlackoutFX, generateBoxes, HeatHazeFX, Viewport } from "@/core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 
 export type GameProps = {
