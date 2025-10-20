@@ -299,12 +299,13 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
   }
 
   /**
-   * Подгоняет параметры камеры под выбранный объект сцены.
+   * Подгоняет параметры камеры под выбранный объект сцены с плавным переходом.
    * @param {Mesh} obj Объект, который необходимо полностью вместить в кадр.
+   * @param {number} [duration=2000] Продолжительность анимации в миллисекундах.
    * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
-   * @returns {void}
+   * @returns {Promise<void>} Промис, завершающийся после окончания анимации.
    */
-  fitToObject(obj: Mesh, margin = 0.1): void {
+  async fitToObject(obj: Mesh, duration = 2000, margin = 0.1): Promise<void> {
     const targetBox = new Box3();
     targetBox.setFromObject(obj);
 
@@ -320,15 +321,14 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
       .clone()
       .sub(this.light.target.position);
 
-    this.target.copy(center);
-    this.camera.position.copy(center.clone().add(cameraOffset));
-    this.camera.lookAt(this.target);
+    const targetPosition = center.clone().add(cameraOffset);
+    const targetLightPosition = center.clone().add(lightOffset);
+    const targetLightTarget = center.clone();
 
-    this.light.position.copy(center.clone().add(lightOffset));
-    this.light.target.position.copy(this.target);
-    this.light.target.updateMatrixWorld();
-
-    this.camera.updateMatrixWorld(true);
+    const cameraClone = this.camera.clone();
+    cameraClone.position.copy(targetPosition);
+    cameraClone.lookAt(targetLightTarget);
+    cameraClone.updateMatrixWorld(true);
 
     const points = [
       new Vector3(targetBox.min.x, targetBox.min.y, targetBox.min.z),
@@ -341,7 +341,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
       new Vector3(targetBox.max.x, targetBox.max.y, targetBox.max.z),
     ];
 
-    const cameraMatrix = this.camera.matrixWorldInverse.clone();
+    const cameraMatrix = cameraClone.matrixWorldInverse.clone();
 
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -369,15 +369,103 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     const heightZoom = baseHeight / (targetHeight || 1);
     const zoom = Math.max(Math.min(widthZoom, heightZoom), Number.EPSILON);
 
-    this.camera.zoom = zoom;
-
     const depth = Math.abs(maxZ - minZ);
     const depthPadding = depth * safeMargin;
     const near = Math.max(0.1, -maxZ - depthPadding);
     const far = Math.max(near + 0.1, -minZ + depthPadding);
 
-    this.camera.near = near;
-    this.camera.far = far;
-    this.camera.updateProjectionMatrix();
+    if (duration <= 0) {
+      this.target.copy(center);
+      this.camera.position.copy(targetPosition);
+      this.camera.lookAt(this.target);
+
+      this.light.position.copy(targetLightPosition);
+      this.light.target.position.copy(this.target);
+      this.light.target.updateMatrixWorld();
+
+      this.camera.zoom = zoom;
+      this.camera.near = near;
+      this.camera.far = far;
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld(true);
+
+      return;
+    }
+
+    const startTarget = this.target.clone();
+    const startCameraPosition = this.camera.position.clone();
+    const startLightPosition = this.light.position.clone();
+    const startLightTarget = this.light.target.position.clone();
+    const startZoom = this.camera.zoom;
+    const startNear = this.camera.near;
+    const startFar = this.camera.far;
+
+    const targetTarget = center.clone();
+
+    const tempTarget = new Vector3();
+    const tempCameraPosition = new Vector3();
+    const tempLightPosition = new Vector3();
+    const tempLightTarget = new Vector3();
+
+    const getNow = (): number =>
+      typeof performance !== "undefined" &&
+      typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+
+    const schedule = (callback: (time: number) => void): void => {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(callback);
+      } else {
+        setTimeout(() => callback(getNow()), 16);
+      }
+    };
+
+    const startTime = getNow();
+
+    const ease = (t: number): number => 1 - Math.pow(1 - t, 3);
+
+    await new Promise<void>((resolve) => {
+      const step = (currentTime: number): void => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = ease(progress);
+
+        this.target.copy(
+          tempTarget.copy(startTarget).lerp(targetTarget, eased)
+        );
+        this.camera.position.copy(
+          tempCameraPosition
+            .copy(startCameraPosition)
+            .lerp(targetPosition, eased)
+        );
+        this.camera.lookAt(this.target);
+
+        this.light.position.copy(
+          tempLightPosition
+            .copy(startLightPosition)
+            .lerp(targetLightPosition, eased)
+        );
+
+        this.light.target.position.copy(
+          tempLightTarget.copy(startLightTarget).lerp(targetLightTarget, eased)
+        );
+        this.light.target.updateMatrixWorld();
+
+        this.camera.zoom = startZoom + (zoom - startZoom) * eased;
+        this.camera.near = startNear + (near - startNear) * eased;
+        this.camera.far = startFar + (far - startFar) * eased;
+        this.camera.updateProjectionMatrix();
+        this.camera.updateMatrixWorld(true);
+
+        if (progress < 1) {
+          schedule(step);
+        } else {
+          resolve();
+        }
+      };
+
+      schedule(step);
+    });
   }
 }
