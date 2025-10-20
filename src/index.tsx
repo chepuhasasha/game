@@ -5,6 +5,7 @@ import { Group } from "three";
 
 import { Controls } from "./controls";
 import { BlackoutFX } from "./fx/blackout";
+import { GlitchFX } from "./fx/glitch";
 import { HeatHazeFX } from "./fx/heat-haze";
 import { Viewport } from "./viewport";
 import { generateBoxes } from "./utils/box-generator";
@@ -51,6 +52,18 @@ export const GameViewport = (): JSX.Element => {
           })
         )
         .useFX("blackout", new BlackoutFX())
+        .useFX(
+          "glitch",
+          new GlitchFX({
+            intensity: 0.7,
+            blockSize: 9.0,
+            chromaticAberration: 0.012,
+            lineStrength: 1.05,
+            noiseScale: 3.0,
+            tearStrength: 1.35,
+            flickerStrength: 0.5,
+          })
+        )
         .render();
 
       viewport.current = instance;
@@ -69,6 +82,12 @@ export const GameViewport = (): JSX.Element => {
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
+
+      instance.fx.glitch.enable();
+      void (async () => {
+        await instance.fx.glitch.play("show", 1200);
+        await instance.fx.glitch.play("hide", 800);
+      })();
       // instance.fx.heatHaze.enable();
       // instance.fx.heatHaze.play(0.85, 1500);
     },
