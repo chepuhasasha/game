@@ -46,7 +46,8 @@ export class Box extends Mesh implements GameObject {
     public readonly rz: boolean,
     public debuffs: BoxDebuff
   ) {
-    const geometry = new BoxGeometry(width, height, depth);
+    const gap = 0.02;
+    const geometry = new BoxGeometry(width - gap, height - gap, depth - gap);
     const material = new MeshStandardMaterial({ color: 0x000000 });
     super(geometry, material);
 
@@ -55,7 +56,7 @@ export class Box extends Mesh implements GameObject {
     segGeo.setPositions(egeo.attributes.position.array);
     const edgeMaterial = new LineMaterial({
       color: 0xffffff,
-      linewidth: 8,
+      linewidth: 4,
       depthTest: true,
       depthWrite: false,
     });

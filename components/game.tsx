@@ -2,7 +2,7 @@ import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet, type GestureResponderEvent } from "react-native";
 import { BlackoutFX, Controls, generateBoxes, HeatHazeFX, Viewport } from "@/core";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
-import { Object3D } from "three";
+import { Group, Object3D } from "three";
 
 export type GameProps = {
   isSoundEnabled: boolean;
@@ -27,9 +27,9 @@ export const Game = ({
       const boxes = generateBoxes({
         seed: 123,
         container: {
-          width: 1.5,
-          height: 1.5,
-          depth: 1.5,
+          width: 1,
+          height: 1,
+          depth: 1,
         },
         cuts: 2,
         debuffDistribution: {
@@ -54,7 +54,7 @@ export const Game = ({
 
       viewport.current = instance;
 
-      const root = new Object3D();
+      const root = new Group();
       boxes.forEach((box) => {
         root.add(box);
       });
@@ -64,21 +64,7 @@ export const Game = ({
       const controller = new Controls(instance);
       controller.setTargetObject(root);
       controls.current = controller;
-
-      // instance.fitToObject(box).then(async () => {
-      //   await box.animateTransform(
-      //     {
-      //       rotation: {
-      //         rx: true,
-      //         ry: false,
-      //         rz: true,
-      //       },
-      //     },
-      //     300
-      //   );
-
-      //   await instance.fitToObject(box);
-      // });
+      // instance.fitToObject(root);
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");
