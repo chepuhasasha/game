@@ -43,10 +43,19 @@ export const Game = ({
 
       viewport.current = instance;
 
-      instance.fitToObject(box).then(() => {
-        box.rotate(true, false, true);
-        box.position.x = 3;
-        instance.fitToObject(box);
+      instance.fitToObject(box).then(async () => {
+        await box.animateTransform(
+          {
+            rotation: {
+              rx: true,
+              ry: false,
+              rz: true,
+            },
+          },
+          300
+        );
+
+        await instance.fitToObject(box);
       });
 
       instance.fx.blackout.enable();
