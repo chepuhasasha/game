@@ -1,33 +1,28 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet, type GestureResponderEvent } from "react-native";
-import {
-  BlackoutFX,
-  Controls,
-  generateBoxes,
-  HeatHazeFX,
-  Viewport,
-} from "@/src";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { Group } from "three";
 
-export type ViewportComponentProps = {
-  isSoundEnabled: boolean;
-  isVibrationEnabled: boolean;
-};
+import { Controls } from "./controls";
+import { BlackoutFX } from "./fx/blackout";
+import { HeatHazeFX } from "./fx/heat-haze";
+import { Viewport } from "./viewport";
+import { generateBoxes } from "./utils/box-generator";
 
 /**
- * Отображает трёхмерный вьюпорт игры.
- * @param {GameProps} props Свойства игры.
- * @returns {JSX.Element} Возвращает разметку компонента вьюпорта.
+ * Отображает основной игровой вьюпорт с трёхмерной сценой.
+ * @returns {JSX.Element} Возвращает разметку игрового вьюпорта.
  */
-export const ViewportComponent = ({
-  isSoundEnabled,
-  isVibrationEnabled,
-}: ViewportComponentProps): JSX.Element => {
+export const GameViewport = (): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const controls = useRef<Controls | null>(null);
   const pointerPosition = useRef<{ x: number; y: number } | null>(null);
 
+  /**
+   * Инициализирует WebGL-контекст и подготавливает сцену перед рендерингом.
+   * @param {ExpoWebGLRenderingContext} gl Контекст WebGL, предоставленный Expo.
+   * @returns {void}
+   */
   const handleContextCreate = useCallback(
     (gl: ExpoWebGLRenderingContext): void => {
       const boxes = generateBoxes({
@@ -83,6 +78,7 @@ export const ViewportComponent = ({
   /**
    * Фиксирует начальную позицию указателя для последующих вычислений смещения.
    * @param {GestureResponderEvent} event Событие начала взаимодействия.
+   * @returns {void}
    */
   const handlePointerStart = useCallback(
     (event: GestureResponderEvent): void => {
@@ -95,6 +91,7 @@ export const ViewportComponent = ({
   /**
    * Обновляет вращение камеры при перемещении указателя.
    * @param {GestureResponderEvent} event Событие перемещения во время жеста.
+   * @returns {void}
    */
   const handlePointerMove = useCallback(
     (event: GestureResponderEvent): void => {
@@ -115,6 +112,7 @@ export const ViewportComponent = ({
 
   /**
    * Сбрасывает сохранённое положение указателя после завершения взаимодействия.
+   * @returns {void}
    */
   const handlePointerEnd = useCallback((): void => {
     pointerPosition.current = null;
@@ -139,3 +137,5 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 });
+
+export default GameViewport;
