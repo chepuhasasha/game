@@ -1,14 +1,13 @@
 import { useCallback, useRef, type JSX } from "react";
 import { StyleSheet, type GestureResponderEvent } from "react-native";
-import {
-  BlackoutFX,
-  Controls,
-  generateBoxes,
-  HeatHazeFX,
-  Viewport,
-} from "@/src";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { Group } from "three";
+
+import { Controls } from "./controls";
+import { BlackoutFX } from "./fx/blackout";
+import { HeatHazeFX } from "./fx/heat-haze";
+import { Viewport } from "./viewport";
+import { generateBoxes } from "./utils/box-generator";
 
 export type ViewportComponentProps = {
   isSoundEnabled: boolean;
@@ -17,7 +16,7 @@ export type ViewportComponentProps = {
 
 /**
  * Отображает трёхмерный вьюпорт игры.
- * @param {GameProps} props Свойства игры.
+ * @param {ViewportComponentProps} props Свойства компонента вьюпорта.
  * @returns {JSX.Element} Возвращает разметку компонента вьюпорта.
  */
 export const ViewportComponent = ({
@@ -139,3 +138,15 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 });
+
+export * from "./viewport";
+export * from "./types";
+export * from "./controls";
+
+export * from "./box";
+
+export * from "./fx/blackout";
+export * from "./fx/heat-haze";
+
+export * from "./utils/box-generator";
+export * from "./utils/animation";
