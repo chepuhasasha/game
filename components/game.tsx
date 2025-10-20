@@ -70,7 +70,7 @@ export const Game = ({
       const controller = new Controls(instance);
       controller.setTargetObject(root);
       controls.current = controller;
-      // instance.fitToObject(root);
+      instance.fitToObject(root);
 
       instance.fx.blackout.enable();
       instance.fx.blackout.play("show");

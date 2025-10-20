@@ -327,7 +327,7 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
    * @param {number} [margin=0.1] Дополнительный относительный отступ вокруг объекта.
    * @returns {Promise<void>} Промис, завершающийся после окончания анимации.
    */
-  async fitToObject(obj: Mesh, duration = 2000, margin = 0.1): Promise<void> {
+  async fitToObject(obj: Object3D, duration = 2000, margin = 0.1): Promise<void> {
     const targetBox = new Box3();
     targetBox.setFromObject(obj);
 
