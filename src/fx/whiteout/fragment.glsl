@@ -39,6 +39,6 @@ void main() {
     n = 0.5 * n + 0.5; // [0,1]
     float mask = smoothstep(threshold + edge, threshold - edge, n); // 1 = клякса
     float a = mask * strength;
-    col = mix(col, vec3(0.0), a);
+    col = mix(col, vec3(1.0), a); // смешиваем с белым цветом
     gl_FragColor = vec4(col, 1.0);
 }
