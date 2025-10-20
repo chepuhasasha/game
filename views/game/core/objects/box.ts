@@ -12,6 +12,8 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
+import { runAnimationLoop } from "../utils/animation";
+
 export type BoxDebuff = {
   FRAGILE: boolean;
   NON_TILTABLE: boolean;
@@ -108,15 +110,9 @@ export class Box extends Mesh implements GameObject {
       return Promise.resolve();
     }
 
-    const getNow = (): number =>
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    const startTime = getNow();
-
-    return new Promise((resolve) => {
-      const step = (): void => {
-        const elapsed = getNow() - startTime;
-        const progress = Math.min(1, elapsed / duration);
-
+    await runAnimationLoop({
+      duration,
+      onFrame: ({ progress }) => {
         if (targetPosition) {
           this.position.set(
             startPosition.x + (targetPosition.x - startPosition.x) * progress,
@@ -133,22 +129,15 @@ export class Box extends Mesh implements GameObject {
             this.rotation.order
           );
         }
-
-        if (progress < 1) {
-          requestAnimationFrame(step);
-        } else {
-          if (targetPosition) {
-            this.position.copy(targetPosition);
-          }
-          if (targetRotation) {
-            this.rotation.copy(targetRotation);
-          }
-          resolve();
-        }
-      };
-
-      requestAnimationFrame(step);
+      },
     });
+
+    if (targetPosition) {
+      this.position.copy(targetPosition);
+    }
+    if (targetRotation) {
+      this.rotation.copy(targetRotation);
+    }
   }
 
   /**

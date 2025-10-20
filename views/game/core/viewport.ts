@@ -17,6 +17,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import type { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 
+import { runAnimationLoop } from "./utils/animation";
 import { EventName, type Extension, type FX } from "./types";
 
 type FXRegistry<TKey extends string = string> = Record<TKey, FX<unknown[]>>;
@@ -407,65 +408,55 @@ export class Viewport<TFx extends FXRegistry = FXRegistry> {
     const tempLightPosition = new Vector3();
     const tempLightTarget = new Vector3();
 
-    const getNow = (): number =>
-      typeof performance !== "undefined" &&
-      typeof performance.now === "function"
-        ? performance.now()
-        : Date.now();
-
-    const schedule = (callback: (time: number) => void): void => {
-      if (typeof requestAnimationFrame === "function") {
-        requestAnimationFrame(callback);
-      } else {
-        setTimeout(() => callback(getNow()), 16);
-      }
-    };
-
-    const startTime = getNow();
-
     const ease = (t: number): number => 1 - Math.pow(1 - t, 3);
 
-    await new Promise<void>((resolve) => {
-      const step = (currentTime: number): void => {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(1, elapsed / duration);
-        const eased = ease(progress);
-
+    await runAnimationLoop({
+      duration,
+      easing: ease,
+      onFrame: ({ easedProgress }) => {
         this.target.copy(
-          tempTarget.copy(startTarget).lerp(targetTarget, eased)
+          tempTarget.copy(startTarget).lerp(targetTarget, easedProgress)
         );
         this.camera.position.copy(
           tempCameraPosition
             .copy(startCameraPosition)
-            .lerp(targetPosition, eased)
+            .lerp(targetPosition, easedProgress)
         );
         this.camera.lookAt(this.target);
 
         this.light.position.copy(
           tempLightPosition
             .copy(startLightPosition)
-            .lerp(targetLightPosition, eased)
+            .lerp(targetLightPosition, easedProgress)
         );
 
         this.light.target.position.copy(
-          tempLightTarget.copy(startLightTarget).lerp(targetLightTarget, eased)
+          tempLightTarget
+            .copy(startLightTarget)
+            .lerp(targetLightTarget, easedProgress)
         );
         this.light.target.updateMatrixWorld();
 
-        this.camera.zoom = startZoom + (zoom - startZoom) * eased;
-        this.camera.near = startNear + (near - startNear) * eased;
-        this.camera.far = startFar + (far - startFar) * eased;
+        this.camera.zoom = startZoom + (zoom - startZoom) * easedProgress;
+        this.camera.near = startNear + (near - startNear) * easedProgress;
+        this.camera.far = startFar + (far - startFar) * easedProgress;
         this.camera.updateProjectionMatrix();
         this.camera.updateMatrixWorld(true);
-
-        if (progress < 1) {
-          schedule(step);
-        } else {
-          resolve();
-        }
-      };
-
-      schedule(step);
+      },
     });
+
+    this.target.copy(targetTarget);
+    this.camera.position.copy(targetPosition);
+    this.camera.lookAt(this.target);
+
+    this.light.position.copy(targetLightPosition);
+    this.light.target.position.copy(targetLightTarget);
+    this.light.target.updateMatrixWorld();
+
+    this.camera.zoom = zoom;
+    this.camera.near = near;
+    this.camera.far = far;
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
   }
 }
