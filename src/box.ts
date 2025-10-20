@@ -6,13 +6,13 @@ import {
   MeshStandardMaterial,
   Vector3,
 } from "three";
-import type { GameObject } from "../types";
+import type { GameObject } from "./types";
 
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
-import { runAnimationLoop } from "../utils/animation";
+import { runAnimationLoop } from "./utils/animation";
 
 export type BoxDebuff = {
   FRAGILE: boolean;

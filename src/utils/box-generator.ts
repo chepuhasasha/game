@@ -1,4 +1,4 @@
-import { Box, type BoxDebuff } from "../objects/box";
+import { Box, type BoxDebuff } from "../box";
 
 type Axis = "width" | "height" | "depth";
 

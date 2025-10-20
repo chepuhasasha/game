@@ -6,11 +6,11 @@ import {
   generateBoxes,
   HeatHazeFX,
   Viewport,
-} from "@/core";
+} from "@/src";
 import { GLView, type ExpoWebGLRenderingContext } from "expo-gl";
 import { Group } from "three";
 
-export type GameProps = {
+export type ViewportComponentProps = {
   isSoundEnabled: boolean;
   isVibrationEnabled: boolean;
 };
@@ -20,10 +20,10 @@ export type GameProps = {
  * @param {GameProps} props Свойства игры.
  * @returns {JSX.Element} Возвращает разметку компонента вьюпорта.
  */
-export const Game = ({
+export const ViewportComponent = ({
   isSoundEnabled,
   isVibrationEnabled,
-}: GameProps): JSX.Element => {
+}: ViewportComponentProps): JSX.Element => {
   const viewport = useRef<Viewport | null>(null);
   const controls = useRef<Controls | null>(null);
   const pointerPosition = useRef<{ x: number; y: number } | null>(null);
